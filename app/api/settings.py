@@ -24,6 +24,7 @@ from app.core.store import (
     user_settings,
 )
 from app.core.config import get_settings
+from app.pipeline.copywriting import POST_LANGUAGES
 from app.estimation.youtube import ChannelError, fetch_channel_average
 
 router = APIRouter()
@@ -39,6 +40,7 @@ def settings_page(request: Request, user: User = Depends(require_user), db: Sess
         "nav": "settings",
         "us": user_settings(db, user.id),
         "caption_styles": CAPTION_STYLES,
+        "post_languages": POST_LANGUAGES,
         "has_youtube_key": db.scalar(select(Credential.id).where(Credential.provider == "youtube")) is not None,
     }
     if user.is_admin:
@@ -75,6 +77,7 @@ def save_user_settings(
     default_max_dur: int = Form(55),
     caption_style: str = Form("geel"),
     framing_default: str = Form("auto"),
+    post_language: str = Form("en"),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -85,6 +88,7 @@ def save_user_settings(
     us.default_max_dur = _clamp(default_max_dur, us.default_min_dur + 5, 180)
     us.caption_style = caption_style if caption_style in CAPTION_STYLES else "geel"
     us.framing_default = framing_default if framing_default in FRAMING_MODES else "auto"
+    us.post_language = post_language if post_language in POST_LANGUAGES else "en"
     db.commit()
     return redirect("/settings", "Instellingen opgeslagen.")
 

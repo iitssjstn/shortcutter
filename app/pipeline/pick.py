@@ -184,6 +184,8 @@ def heuristic_pick(transcript: dict, n: int, min_dur: float, max_dur: float) -> 
                 "title": title[:80],
                 "hook": first[:200],
                 "reason": f"Gekozen op spreekdichtheid ({wps:.1f} woorden/s), zonder LLM.",
+                "description": "",
+                "hashtags": "#shorts",
                 "category": "overig",
                 "subscores": sub,
                 "source": "heuristiek",
@@ -302,16 +304,19 @@ SYSTEM_PROMPT = (
 )
 
 
-def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float) -> str:
+def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: str = "en") -> str:
+    from app.pipeline.copywriting import copy_rules
+
     return (
         f"Kies maximaal {n} fragmenten van {min_dur:.0f} tot {max_dur:.0f} seconden uit dit "
         "transcript (tijden in seconden tussen haken). Geef JSON in de vorm:\n"
-        '{"clips": [{"start": 12.3, "end": 45.6, "title": "korte pakkende titel", '
+        '{"clips": [{"start": 12.3, "end": 45.6, "title": "posttitel", '
+        '"description": "beschrijving bij de post", "hashtags": ["#voorbeeld", "#shorts"], '
         '"hook": "de openingszin", "reason": "waarom dit werkt", '
         f'"category": "een van {"/".join(CATEGORIES)}", '
         '"hook_sterkte": 1-10, "emotie_of_verrassing": 1-10, '
         '"begrijpelijkheid_zonder_context": 1-10, "afronding": 1-10}]}\n'
-        "Schrijf titel, hook en reden in de taal van het transcript. Wees streng met de scores.\n\n"
+        "Wees streng met de scores. " + copy_rules(language) + "\n\n"
         f"TRANSCRIPT:\n{chunk}"
     )
 
@@ -332,7 +337,10 @@ def llm_pick(
     *,
     client: httpx.Client | None = None,
     sleep: Callable[[float], None] = _sleep,
+    post_language: str = "en",
 ) -> list[dict]:
+    from app.pipeline.copywriting import clean_description, clean_title, normalize_hashtags
+
     words = all_words(transcript)
     sents = sentences(words)
     total = float(transcript.get("duration") or (words[-1]["end"] if words else 0)) or None
@@ -346,7 +354,7 @@ def llm_pick(
             cfg,
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur)},
+                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language)},
             ],
             client=client,
             sleep=sleep,
@@ -366,7 +374,9 @@ def llm_pick(
                 {
                     "start": snapped[0],
                     "end": snapped[1],
-                    "title": str(it.get("title") or "Clip")[:120],
+                    "title": clean_title(it.get("title"), "Clip"),
+                    "description": clean_description(it.get("description")),
+                    "hashtags": normalize_hashtags(it.get("hashtags")),
                     "hook": str(it.get("hook") or "")[:300],
                     "reason": str(it.get("reason") or "")[:500],
                     "category": cat if cat in CATEGORIES else "overig",

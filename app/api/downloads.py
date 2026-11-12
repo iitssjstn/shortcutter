@@ -124,7 +124,7 @@ def posting_text(project: Project, clips: list[Clip], estimates: dict[int, dict]
             c.title,
             "",
             "Beschrijving:",
-            (c.hook + "\n\n" if c.hook else "") + "#shorts",
+            c.post_text,
             "",
             f"Viral score: {c.viral_score}/10 · geschatte views (schatting): "
             f"{est['low']}–{est['high']} (midden {est['mid']})",
@@ -145,6 +145,9 @@ def stream_zip(project: Project, clips: list[Clip], estimates: dict[int, dict]) 
                     "bestand": f"clips/{clip_filename(c)}",
                     "titel": c.title,
                     "hook": c.hook,
+                    "beschrijving": c.description,
+                    "hashtags": c.hashtags,
+                    "posttekst": c.post_text,
                     "viral_score": c.viral_score,
                     "categorie": c.category,
                     "start": c.start,

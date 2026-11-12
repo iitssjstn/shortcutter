@@ -52,6 +52,9 @@ _ADDED_COLUMNS = [
     ("projects", "framing", "VARCHAR(16) NOT NULL DEFAULT 'auto'"),
     ("clips", "framing_choice", "VARCHAR(16)"),
     ("clips", "crop_x", "FLOAT"),
+    ("clips", "description", "TEXT NOT NULL DEFAULT ''"),
+    ("user_settings", "post_language", "VARCHAR(8) NOT NULL DEFAULT 'en'"),
+    ("clips", "hashtags", "VARCHAR(300) NOT NULL DEFAULT ''"),
 ]
 
 

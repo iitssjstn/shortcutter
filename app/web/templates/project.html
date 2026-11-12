@@ -74,6 +74,10 @@
   <label class="row" style="margin:0;font-weight:500"><input type="checkbox" id="select-all"> Alles selecteren</label>
   <span class="spacer"></span>
   <a class="btn" id="download-selection" data-base="/projects/{{ project.id }}/zip-selection" href="/projects/{{ project.id }}/zip-selection" aria-disabled="true">Download selectie (<span id="selection-count">0</span>)</a>
+  <form method="post" action="/projects/{{ project.id }}/generate-texts" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn" type="submit">Posttekst voor alle clips</button>
+  </form>
   <a class="btn btn-primary" href="/projects/{{ project.id }}/zip">Alles downloaden (zip)</a>
 </div>
 <form method="post" action="/projects/{{ project.id }}/reframe" class="row card" style="padding:.7rem;margin-bottom:.75rem" data-confirm="Alle clips opnieuw renderen met deze beeldvulling? Eigen instellingen per clip vervallen.">

@@ -138,6 +138,8 @@ bestaande sleutels niet meer ontsleuteld worden en moet je ze opnieuw invullen.
   (zonder AVX, float32, zonder spraakdetectie). Dat is trager maar werkt op elke x86-CPU. Raakt het
   geheugen vol, dan krijg je daarvan een melding: kies dan een kleiner model (`base` of `tiny`).
   Een taak die de server twee keer laat herstarten, wordt als mislukt gemarkeerd in plaats van eindeloos opnieuw te starten.
+- **Posttekst**: de LLM schrijft per clip een titel, beschrijving en hashtags om te kopiëren (standaard in het
+  Engels voor meer bereik; te wijzigen bij Instellingen). Voor bestaande clips: "Posttekst voor alle clips".
 - **Beeld niet gevuld (16:9 klein in 9:16)**: kies bij Beeldvulling "Vullen" (per project, als standaard bij
   Instellingen, of per clip met een schuif voor de positie). "Automatisch" vult alleen als er een gezicht in beeld is.
 - **Render mislukt**: de ruwe ge-cropte versie en de `.ass` blijven downloadbaar; klik op *Opnieuw renderen*.

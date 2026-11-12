@@ -37,6 +37,17 @@
       {% if c.est_mid_at_post %}<span class="muted" style="font-size:.8rem;font-weight:400">(geschat bij posten: {{ fmt_views(c.est_mid_at_post) }})</span>{% endif %}</div></div>
     {% endif %}
 
+    <div class="post-copy">
+      <div class="k">Titel</div>
+      <div class="copybox"><input id="ptitle-{{ c.id }}" type="text" readonly value="{{ c.title }}" aria-label="Posttitel"><button class="btn btn-sm" type="button" data-copy="ptitle-{{ c.id }}">Kopieer</button></div>
+      <div class="k">Beschrijving + hashtags</div>
+      <div class="copybox"><textarea id="ptext-{{ c.id }}" rows="5" readonly aria-label="Beschrijving en hashtags">{{ c.post_text }}</textarea><button class="btn btn-sm" type="button" data-copy="ptext-{{ c.id }}">Kopieer</button></div>
+      <form method="post" action="/clips/{{ c.id }}/generate-text" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="linklike" type="submit">{{ 'Opnieuw genereren' if c.description else 'Posttekst genereren met AI' }}</button>
+      </form>
+    </div>
+
     <div class="clip-actions">
       {% if c.file_path or c.raw_path %}<a class="btn btn-sm btn-primary" href="/clips/{{ c.id }}/download">Download mp4</a>{% endif %}
       {% if c.status in ('failed',) or not c.file_path %}
@@ -62,8 +73,10 @@
         <form method="post" action="/clips/{{ c.id }}/retitle">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="field"><label for="title-{{ c.id }}">Titel</label><input id="title-{{ c.id }}" name="title" type="text" value="{{ c.title }}" maxlength="300" required></div>
-          <div class="field"><label for="hook-{{ c.id }}">Hook / beschrijving</label><textarea id="hook-{{ c.id }}" name="hook" rows="2">{{ c.hook }}</textarea></div>
-          <button class="btn btn-sm" type="submit">Titel opslaan</button>
+          <div class="field"><label for="desc-{{ c.id }}">Beschrijving</label><textarea id="desc-{{ c.id }}" name="description" rows="2">{{ c.description }}</textarea></div>
+          <div class="field"><label for="tags-{{ c.id }}">Hashtags</label><input id="tags-{{ c.id }}" name="hashtags" type="text" value="{{ c.hashtags }}" placeholder="#shorts"></div>
+          <div class="field"><label for="hook-{{ c.id }}">Hook (openingszin)</label><textarea id="hook-{{ c.id }}" name="hook" rows="2">{{ c.hook }}</textarea></div>
+          <button class="btn btn-sm" type="submit">Tekst opslaan</button>
         </form>
         <form method="post" action="/clips/{{ c.id }}/trim">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

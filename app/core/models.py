@@ -145,6 +145,7 @@ class UserSettings(Base):
     default_max_dur: Mapped[int] = mapped_column(Integer, default=55)
     caption_style: Mapped[str] = mapped_column(String(32), default="geel")
     framing_default: Mapped[str] = mapped_column(String(16), default="auto")
+    post_language: Mapped[str] = mapped_column(String(8), default="en")
 
 
 class Project(Base, JsonMixin):
@@ -202,6 +203,8 @@ class Clip(Base, JsonMixin):
     title: Mapped[str] = mapped_column(String(300), default="")
     hook: Mapped[str] = mapped_column(Text, default="")
     reason: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    hashtags: Mapped[str] = mapped_column(String(300), default="")
     category: Mapped[str] = mapped_column(String(40), default="overig")
     subscores_json: Mapped[str] = mapped_column(Text, default="{}")
     features_json: Mapped[str] = mapped_column(Text, default="{}")
@@ -242,6 +245,13 @@ class Clip(Base, JsonMixin):
     @property
     def duration(self) -> float:
         return max(0.0, self.end - self.start)
+
+    @property
+    def post_text(self) -> str:
+        """Beschrijving + hashtags, klaar om te plakken."""
+        desc = (self.description or self.hook or "").strip()
+        tags = (self.hashtags or "#shorts").strip()
+        return f"{desc}\n\n{tags}" if desc else tags
 
 
 class Job(Base, JsonMixin):

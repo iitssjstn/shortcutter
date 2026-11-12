@@ -139,6 +139,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .copybox { display: flex; gap: .5rem; }
 .copybox input { font-family: ui-monospace, monospace; font-size: .85rem; }
+.post-copy { background: var(--surface-2); border-radius: 8px; padding: .55rem .6rem; display: flex; flex-direction: column; gap: .3rem; }
+.post-copy .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.post-copy .copybox input, .post-copy textarea { font-family: inherit; font-size: .85rem; background: var(--surface); resize: vertical; }
+.post-copy .copybox { align-items: flex-start; }
 .setup-code { font-family: ui-monospace, monospace; }
 
 @media (max-width: 700px) {

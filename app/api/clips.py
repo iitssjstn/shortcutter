@@ -14,10 +14,13 @@ from app.core.auth import require_user
 from app.core.db import get_db
 from app.core.models import Clip, User, utcnow
 from app.core.paths import find_source, project_output, safe_child
-from app.core.store import FRAMING_MODES, get_clip_for, get_project_for
+from app.core.store import FRAMING_MODES, get_clip_for, get_project_for, user_settings
 from app.estimation.estimator import viral_score
 from app.estimation.features import compute_features
+from app.core.keys import load_llm_config
 from app.estimation.service import clip_estimate
+from app.pipeline.copywriting import generate_post_texts, normalize_hashtags
+from app.pipeline.errors import LLMError
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript, write_clips_json
 from app.pipeline.transcribe import all_words
 from app.worker import queue
@@ -161,7 +164,15 @@ def toggle_captions(cid: int, enabled: str = Form("0"), user: User = Depends(req
 
 
 @router.post("/clips/{cid}/retitle")
-def retitle(cid: int, title: str = Form(...), hook: str = Form(None), user: User = Depends(require_user), db: Session = Depends(get_db)):
+def retitle(
+    cid: int,
+    title: str = Form(...),
+    hook: str = Form(None),
+    description: str = Form(None),
+    hashtags: str = Form(None),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     clip = get_clip_for(db, user, cid)
     title = title.strip()
     if not title:
@@ -169,9 +180,64 @@ def retitle(cid: int, title: str = Form(...), hook: str = Form(None), user: User
     clip.title = title[:300]
     if hook is not None:
         clip.hook = hook.strip()[:1000]
+    if description is not None:
+        clip.description = description.strip()[:1000]
+    if hashtags is not None:
+        clip.hashtags = normalize_hashtags(hashtags)
     db.commit()
     write_clips_json(db, clip.project)
     return redirect(_back(clip), "Titel bijgewerkt.")
+
+
+def _generate(db: Session, clips: list[Clip]) -> tuple[int, str | None]:
+    """Laat de LLM posttekst schrijven. Geeft (aantal bijgewerkt, foutmelding) terug."""
+    cfg = load_llm_config(db)
+    if cfg is None:
+        return 0, "Er is geen LLM-sleutel ingesteld (zie API-sleutels)."
+    if not clips:
+        return 0, "Er zijn geen clips."
+    transcript = load_transcript(clips[0].project_id) or {"segments": []}
+    words = all_words(transcript)
+    done = 0
+    for i in range(0, len(clips), 10):
+        batch = clips[i : i + 10]
+        items = []
+        for c in batch:
+            text = " ".join(w["word"] for w in words if c.start <= w["start"] < c.end) or c.hook or c.title
+            items.append({"id": c.id, "text": text, "title": c.title})
+        try:
+            lang = user_settings(db, clips[0].owner_id).post_language or "en"
+            result = generate_post_texts(cfg, items, language=lang)
+        except LLMError as exc:
+            db.commit()
+            return done, f"Posttekst genereren mislukt: {exc}"
+        for c in batch:
+            r = result.get(c.id)
+            if r:
+                c.title, c.description, c.hashtags = r["title"], r["description"], r["hashtags"]
+                done += 1
+    db.commit()
+    return done, None
+
+
+@router.post("/clips/{cid}/generate-text")
+def generate_clip_text(cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    clip = get_clip_for(db, user, cid)
+    done, err = _generate(db, [clip])
+    if err:
+        return redirect(_back(clip), err, "error")
+    write_clips_json(db, clip.project)
+    return redirect(_back(clip), "Posttekst gegenereerd.")
+
+
+@router.post("/projects/{pid}/generate-texts")
+def generate_project_texts(pid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    project = get_project_for(db, user, pid)
+    done, err = _generate(db, list(project.clips))
+    write_clips_json(db, project)
+    if err:
+        return redirect(f"/projects/{pid}", (f"{done} clip(s) bijgewerkt. " if done else "") + err, "error")
+    return redirect(f"/projects/{pid}", f"Posttekst gegenereerd voor {done} clip(s).")
 
 
 @router.post("/clips/{cid}/delete")

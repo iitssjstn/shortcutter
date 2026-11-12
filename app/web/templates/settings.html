@@ -20,6 +20,11 @@
           {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if us.framing_default == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
         <div class="hint">"Vullen" zoomt in zodat het hele 9:16-beeld gevuld is; bij gaming of schermopnames meestal het beste.</div></div>
+      <div class="field"><label for="post_language">Taal van titel, beschrijving en hashtags</label>
+        <select id="post_language" name="post_language">
+          {% for k, label in post_languages.items() %}<option value="{{ k }}" {% if us.post_language == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <div class="hint">De ondertitels blijven altijd in de taal van de video.</div></div>
       <div class="field"><label for="caption_style">Ondertitelstijl</label>
         <select id="caption_style" name="caption_style">
           {% for k, label in caption_styles.items() %}<option value="{{ k }}" {% if us.caption_style == k %}selected{% endif %}>{{ label }}</option>{% endfor %}

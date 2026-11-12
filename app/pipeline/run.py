@@ -78,6 +78,9 @@ def write_clips_json(db: Session, project: Project) -> Path:
                 "titel": c.title,
                 "hook": c.hook,
                 "reden": c.reason,
+                "beschrijving": c.description,
+                "hashtags": c.hashtags,
+                "posttekst": c.post_text,
                 "categorie": c.category,
                 "bron": c.source,
                 "viral_score": c.viral_score,
@@ -197,8 +200,12 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
         if not project.clips:
             _set(db, project, "picking", 58, "Fragmenten kiezen…")
             cfg = load_llm_config(db)
+            from app.core.store import user_settings
+
+            lang = user_settings(db, project.owner_id).post_language or "en"
             picked, method, warning = pick_clips(
-                transcript, project.num_clips, project.min_dur, project.max_dur, cfg, **pick_kwargs
+                transcript, project.num_clips, project.min_dur, project.max_dur, cfg,
+                post_language=lang, **pick_kwargs,
             )
             project.picker_used = method
             if warning:
@@ -216,6 +223,8 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
                         title=c["title"],
                         hook=c["hook"],
                         reason=c["reason"],
+                        description=c.get("description", ""),
+                        hashtags=c.get("hashtags", ""),
                         category=c["category"],
                         subscores_json=json.dumps(c["subscores"]),
                         source=c["source"],
