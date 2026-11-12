@@ -76,6 +76,14 @@
   <a class="btn" id="download-selection" data-base="/projects/{{ project.id }}/zip-selection" href="/projects/{{ project.id }}/zip-selection" aria-disabled="true">Download selectie (<span id="selection-count">0</span>)</a>
   <a class="btn btn-primary" href="/projects/{{ project.id }}/zip">Alles downloaden (zip)</a>
 </div>
+<form method="post" action="/projects/{{ project.id }}/reframe" class="row card" style="padding:.7rem;margin-bottom:.75rem" data-confirm="Alle clips opnieuw renderen met deze beeldvulling? Eigen instellingen per clip vervallen.">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="reframe" style="margin:0">Beeldvulling voor alle clips</label>
+  <select id="reframe" name="framing" style="flex:1;min-width:200px">
+    {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if project.framing == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-sm" type="submit">Alle clips opnieuw renderen</button>
+</form>
 <p class="muted" style="font-size:.85rem;margin-top:-.4rem">
   Views zijn een <strong>schatting</strong> (laag – hoog) t.o.v. het kanaalgemiddelde van {{ fmt_views(baseline) }}.
   {% if calibration.method == 'standaard' %}Nog niet gekalibreerd: vul echte views in bij geposte clips.{% else %}Gekalibreerd met {{ calibration.n }} geposte clips ({{ calibration.method }}).{% endif %}

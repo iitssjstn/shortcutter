@@ -14,7 +14,7 @@ from app.core.auth import require_user
 from app.core.db import get_db
 from app.core.models import Clip, User, utcnow
 from app.core.paths import find_source, project_output, safe_child
-from app.core.store import get_clip_for, get_project_for
+from app.core.store import FRAMING_MODES, get_clip_for, get_project_for
 from app.estimation.estimator import viral_score
 from app.estimation.features import compute_features
 from app.estimation.service import clip_estimate
@@ -110,6 +110,27 @@ def trim(cid: int, start: str = Form(...), end: str = Form(...), user: User = De
     _rescore(clip)
     msg = _queue_render(db, clip)
     return redirect(_back(clip), msg)
+
+
+@router.post("/clips/{cid}/framing")
+def set_framing(
+    cid: int,
+    mode: str = Form("auto"),
+    position: str = Form(""),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    clip = get_clip_for(db, user, cid)
+    if mode not in FRAMING_MODES and mode != "project":
+        raise HTTPException(400, "Onbekende beeldvulling.")
+    clip.framing_choice = None if mode == "project" else mode
+    clip.crop_x = None
+    if mode == "crop" and position.strip():
+        try:
+            clip.crop_x = min(1.0, max(0.0, float(position) / 100))
+        except ValueError as exc:
+            raise HTTPException(400, "Ongeldige positie.") from exc
+    return redirect(_back(clip), _queue_render(db, clip))
 
 
 @router.post("/clips/{cid}/rerender")

@@ -14,6 +14,7 @@ from app.core.models import Credential, Project, User
 from app.core.paths import dir_size, project_input, project_output
 from app.core.store import (
     CAPTION_STYLES,
+    FRAMING_MODES,
     GLOBAL_DEFAULTS,
     WHISPER_MODELS,
     audit,
@@ -73,6 +74,7 @@ def save_user_settings(
     default_min_dur: int = Form(20),
     default_max_dur: int = Form(55),
     caption_style: str = Form("geel"),
+    framing_default: str = Form("auto"),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -82,6 +84,7 @@ def save_user_settings(
     us.default_min_dur = _clamp(default_min_dur, 5, 120)
     us.default_max_dur = _clamp(default_max_dur, us.default_min_dur + 5, 180)
     us.caption_style = caption_style if caption_style in CAPTION_STYLES else "geel"
+    us.framing_default = framing_default if framing_default in FRAMING_MODES else "auto"
     db.commit()
     return redirect("/settings", "Instellingen opgeslagen.")
 

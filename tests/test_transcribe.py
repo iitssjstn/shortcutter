@@ -148,3 +148,19 @@ def test_in_process_passes_array_not_file(tmp_path, sample_video, monkeypatch):
     assert isinstance(seen["audio"], np.ndarray)
     assert seen["kw"]["word_timestamps"] is True and seen["kw"]["vad_filter"] is False
     assert data["segments"][0]["words"][0]["word"] == "hoi"
+
+
+def test_migration_adds_framing_columns(tmp_path):
+    path = tmp_path / "oud2.sqlite"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE user_settings (user_id INTEGER PRIMARY KEY, channel_avg_views INTEGER)")
+    con.execute("CREATE TABLE projects (id INTEGER PRIMARY KEY, title VARCHAR)")
+    con.execute("CREATE TABLE clips (id INTEGER PRIMARY KEY, title VARCHAR)")
+    con.execute("INSERT INTO projects (id, title) VALUES (1, 'oud')")
+    con.commit()
+    con.close()
+    init_db(str(path))
+    con = sqlite3.connect(path)
+    assert "framing_default" in [r[1] for r in con.execute("PRAGMA table_info(user_settings)")]
+    assert con.execute("SELECT framing FROM projects WHERE id=1").fetchone() == ("auto",)
+    assert {"framing_choice", "crop_x"} <= {r[1] for r in con.execute("PRAGMA table_info(clips)")}

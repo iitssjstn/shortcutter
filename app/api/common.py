@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.core.auth import ensure_csrf_cookie
 from app.core.paths import fmt_bytes
+from app.core.store import FRAMING_MODES
 from app.estimation.estimator import fmt_views
 from app.pipeline.run import ACTIVE_STATUSES, STATUS_LABELS
 
@@ -21,6 +22,7 @@ templates.env.globals.update(
     ACTIVE_STATUSES=ACTIVE_STATUSES,
     fmt_views=fmt_views,
     fmt_bytes=fmt_bytes,
+    FRAMING_MODES=FRAMING_MODES,
 )
 
 

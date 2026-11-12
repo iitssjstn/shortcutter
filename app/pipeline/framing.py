@@ -58,10 +58,10 @@ def detect_faces(video: Path, start: float, end: float, step: float = SAMPLE_STE
                 continue
             samples += 1
             h, w = frame.shape[:2]
-            scale = 480 / w if w > 480 else 1.0
+            scale = 640 / w if w > 640 else 1.0
             small = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale != 1.0 else frame
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(24, 24))
             if len(faces):
                 x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
                 hits += 1
@@ -98,6 +98,9 @@ def blur_filter() -> str:
     )
 
 
+MODES = ("auto", "crop", "blur")
+
+
 def choose_framing(
     video: Path,
     src_w: int,
@@ -107,13 +110,25 @@ def choose_framing(
     force_mode: str | None = None,
     face_x: float | None = None,
 ) -> Framing:
-    if force_mode == "crop" and face_x is not None:
-        return Framing("crop", crop_filter(src_w, src_h, face_x), 1.0, face_x)
-    if force_mode == "blur":
-        return Framing("blur", blur_filter())
+    """Kies de framing.
+
+    force_mode: None/'auto' = vullen als er een gezicht in beeld is, anders passend;
+    'crop' = altijd vullen (rond het gezicht, of op face_x, of in het midden);
+    'blur' = altijd passend op een wazige achtergrond.
+    face_x: handmatige horizontale positie van de uitsnede (0 = links, 1 = rechts).
+    """
+    mode = force_mode if force_mode in MODES else "auto"
     if src_h >= src_w:
         return Framing("vertical", vertical_filter())
+    if mode == "blur":
+        return Framing("blur", blur_filter())
+    if face_x is not None:  # gebruiker koos zelf een positie: altijd vullen
+        fx = min(1.0, max(0.0, face_x))
+        return Framing("crop", crop_filter(src_w, src_h, fx), 1.0, fx)
     ratio, fx = detect_faces(video, start, end)
+    if mode == "crop":
+        pos = fx if fx is not None else 0.5
+        return Framing("crop", crop_filter(src_w, src_h, pos), max(ratio, 0.0), pos)
     if ratio >= FACE_RATIO and fx is not None:
         return Framing("crop", crop_filter(src_w, src_h, fx), ratio, fx)
     return Framing("blur", blur_filter(), max(ratio, 0.0), fx)

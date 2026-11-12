@@ -15,6 +15,11 @@
         <div class="field"><label for="default_min_dur">Min. duur (s)</label><input id="default_min_dur" name="default_min_dur" type="number" min="5" max="120" value="{{ us.default_min_dur }}"></div>
         <div class="field"><label for="default_max_dur">Max. duur (s)</label><input id="default_max_dur" name="default_max_dur" type="number" min="10" max="180" value="{{ us.default_max_dur }}"></div>
       </div>
+      <div class="field"><label for="framing_default">Beeldvulling (standaard voor nieuwe projecten)</label>
+        <select id="framing_default" name="framing_default">
+          {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if us.framing_default == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <div class="hint">"Vullen" zoomt in zodat het hele 9:16-beeld gevuld is; bij gaming of schermopnames meestal het beste.</div></div>
       <div class="field"><label for="caption_style">Ondertitelstijl</label>
         <select id="caption_style" name="caption_style">
           {% for k, label in caption_styles.items() %}<option value="{{ k }}" {% if us.caption_style == k %}selected{% endif %}>{{ label }}</option>{% endfor %}

@@ -204,3 +204,39 @@ def test_youtube_url_validation():
     assert download_mod.is_valid_url("https://youtu.be/abc")
     assert not download_mod.is_valid_url("https://evil.example.com/watch?v=abc")
     assert not download_mod.is_valid_url("file:///etc/passwd")
+
+
+def test_framing_choices_and_reframe(project_factory, settings, sample_video, monkeypatch, admin_client):
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+    admin_client.post("/settings", data={"channel_avg_views": "1000", "default_num_clips": "2", "default_min_dur": "5",
+                                         "default_max_dur": "20", "caption_style": "geel", "framing_default": "crop"})
+    page = admin_client.get("/").text
+    assert 'value="crop" selected' in page
+    pid = project_factory()
+    _put_source(settings, pid, sample_video)
+    run_job_once()
+    db = new_session()
+    clips = db.scalars(select(Clip).where(Clip.project_id == pid)).all()
+    assert all(c.framing_mode == "blur" for c in clips)  # project stond op 'auto', testsrc heeft geen gezicht
+    cid = clips[0].id
+    db.close()
+
+    # per clip: vullen met positie links
+    assert admin_client.post(f"/clips/{cid}/framing", data={"mode": "crop", "position": "0"}).status_code == 303
+    run_job_once()
+    db = new_session()
+    c = db.get(Clip, cid)
+    assert c.framing_mode == "crop" and c.crop_x == 0.0 and c.framing_choice == "crop" and c.status == "ready"
+    db.close()
+
+    # hele project op vullen zetten
+    assert admin_client.post(f"/projects/{pid}/reframe", data={"framing": "crop"}).status_code == 303
+    while run_job_once():
+        pass
+    db = new_session()
+    p = db.get(Project, pid)
+    assert p.framing == "crop"
+    for c in p.clips:
+        assert c.framing_mode == "crop" and c.framing_choice is None and c.crop_x is None and c.status == "ready"
+    db.close()
+    assert admin_client.post(f"/projects/{pid}/reframe", data={"framing": "zoom"}).status_code == 400

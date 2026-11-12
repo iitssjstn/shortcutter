@@ -144,6 +144,7 @@ class UserSettings(Base):
     default_min_dur: Mapped[int] = mapped_column(Integer, default=20)
     default_max_dur: Mapped[int] = mapped_column(Integer, default=55)
     caption_style: Mapped[str] = mapped_column(String(32), default="geel")
+    framing_default: Mapped[str] = mapped_column(String(16), default="auto")
 
 
 class Project(Base, JsonMixin):
@@ -169,6 +170,7 @@ class Project(Base, JsonMixin):
     min_dur: Mapped[int] = mapped_column(Integer, default=20)
     max_dur: Mapped[int] = mapped_column(Integer, default=55)
     caption_style: Mapped[str] = mapped_column(String(32), default="geel")
+    framing: Mapped[str] = mapped_column(String(16), default="auto")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -206,7 +208,9 @@ class Clip(Base, JsonMixin):
     viral_score: Mapped[float] = mapped_column(Float, default=5.0)
     source: Mapped[str] = mapped_column(String(20), default="llm")  # llm | heuristiek | handmatig
     captions_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    framing_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    framing_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)  # resultaat: vertical|crop|blur
+    framing_choice: Mapped[str | None] = mapped_column(String(16), nullable=True)  # keuze; None = projectinstelling
+    crop_x: Mapped[float | None] = mapped_column(Float, nullable=True)  # handmatige positie 0..1
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

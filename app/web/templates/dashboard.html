@@ -37,6 +37,10 @@
         <div class="field"><label for="max_dur">Max. duur (s)</label>
           <input id="max_dur" name="max_dur" type="number" min="10" max="180" value="{{ settings.default_max_dur }}"></div>
       </div>
+      <div class="field"><label for="framing">Beeldvulling</label>
+        <select id="framing" name="framing">
+          {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if settings.framing_default == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
       <button class="btn btn-primary btn-block" type="submit">Start project</button>
       <p class="hint" style="margin-top:.6rem">Gebruik alleen video's van jezelf of waarvoor je toestemming hebt.</p>
     </form>

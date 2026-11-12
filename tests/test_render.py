@@ -85,3 +85,34 @@ def test_crop_filter_clamps():
     assert "crop=606:1080:1314:0" in f
     f = framing.crop_filter(1920, 1080, 0.0)
     assert "crop=606:1080:0:0" in f
+
+
+def test_fill_mode_without_face_crops_center(sample_video):
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="crop")
+    assert fr.mode == "crop" and fr.face_x == 0.5
+    assert "crop=404:720:438:0" in fr.filter  # 9:16-uitsnede uit het midden
+
+
+def test_manual_position_always_fills(sample_video):
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="auto", face_x=0.0)
+    assert fr.mode == "crop" and "crop=404:720:0:0" in fr.filter
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="blur", face_x=0.0)
+    assert fr.mode == "blur"
+
+
+def test_fill_render_has_no_blur_bars(tmp_path, sample_video):
+    """In vul-modus is ook de bovenkant van het 9:16-beeld de echte (bijgesneden) video, geen wazige balk."""
+    expected = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-ss", "2.0", "-i", str(sample_video), "-frames:v", "1",
+         "-vf", "crop=404:720:438:0,scale=1080:1920", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    exp = np.frombuffer(expected, dtype=np.uint8).reshape(1920, 1080, 3).astype(int)
+    results = {}
+    for mode in ("crop", "blur"):
+        fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode=mode)
+        out = render.render_raw(sample_video, 1.0, 3.0, fr.filter, tmp_path / f"clip_{mode}_raw.mp4")
+        f = frame_at(out, 1.0).astype(int)
+        results[mode] = np.abs(f[:400] - exp[:400]).mean()
+    assert results["crop"] < 12, results
+    assert results["blur"] > results["crop"] * 3, results

@@ -17,6 +17,11 @@ GLOBAL_DEFAULTS: dict[str, str] = {
 }
 
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo", "distil-large-v3"]
+FRAMING_MODES = {
+    "auto": "Automatisch (vullen als er een gezicht in beeld is)",
+    "crop": "Vullen (inzoomen en bijsnijden tot 9:16)",
+    "blur": "Passend (hele beeld op wazige achtergrond)",
+}
 CAPTION_STYLES = {
     "geel": "Wit met gele highlight",
     "groen": "Wit met groene highlight",

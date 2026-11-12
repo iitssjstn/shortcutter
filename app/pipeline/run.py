@@ -106,7 +106,9 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
     db.commit()
     words = all_words(transcript)
     try:
-        fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end)
+        mode = clip.framing_choice or project.framing or "auto"
+        fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end,
+                                    force_mode=mode, face_x=clip.crop_x)
         clip.framing_mode = fr.mode
         captions.write_ass(ass, words, clip.start, clip.end, project.caption_style)
         clip.ass_path = ass.name

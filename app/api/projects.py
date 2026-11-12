@@ -16,7 +16,7 @@ from app.core.db import get_db
 from app.core.keys import active_llm
 from app.core.models import Job, Project, User
 from app.core.paths import dir_size, find_source, project_input, project_output, safe_child
-from app.core.store import get_global_int, get_project_for, user_settings
+from app.core.store import FRAMING_MODES, get_global_int, get_project_for, user_settings
 from app.estimation.service import clip_estimate, user_calibration
 from app.pipeline.download import is_valid_url
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript
@@ -77,6 +77,7 @@ def create_project(
     num_clips: int = Form(5),
     min_dur: int = Form(20),
     max_dur: int = Form(55),
+    framing: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -111,6 +112,7 @@ def create_project(
         min_dur=min_dur,
         max_dur=max_dur,
         caption_style=us.caption_style,
+        framing=framing if framing in FRAMING_MODES else (us.framing_default or "auto"),
         status="queued",
     )
     db.add(project)
@@ -191,6 +193,30 @@ def upload_source(
         return redirect(f"/projects/{pid}", "Bronbestand geüpload. Je kunt clips nu opnieuw renderen.")
     queue.enqueue(db, project)
     return redirect(f"/projects/{pid}", "Bronbestand geüpload; het project gaat verder waar het gebleven was.")
+
+
+@router.post("/projects/{pid}/reframe")
+def reframe_project(pid: int, framing: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Stel de beeldvulling voor het hele project in en render alle clips opnieuw."""
+    project = get_project_for(db, user, pid)
+    if framing not in FRAMING_MODES:
+        raise HTTPException(400, "Onbekende beeldvulling.")
+    if project.status in ACTIVE_STATUSES:
+        return redirect(f"/projects/{pid}", "Wacht tot de verwerking klaar is.", "error")
+    project.framing = framing
+    for c in project.clips:
+        c.framing_choice = None
+        c.crop_x = None
+    db.commit()
+    if find_source(pid) is None:
+        return redirect(f"/projects/{pid}", "Instelling opgeslagen, maar het bronbestand is verwijderd. "
+                        "Upload de bron opnieuw om de clips opnieuw te renderen.", "error")
+    for c in project.clips:
+        c.status = "pending"
+    db.commit()
+    for c in project.clips:
+        queue.enqueue(db, project, "render_clip", c.id)
+    return redirect(f"/projects/{pid}", f"Alle {len(project.clips)} clips worden opnieuw gerenderd.")
 
 
 @router.post("/projects/{pid}/delete")

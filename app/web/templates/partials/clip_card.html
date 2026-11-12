@@ -18,6 +18,7 @@
     <div class="row">
       <span class="badge">{{ c.start|ts }} – {{ c.end|ts }} ({{ '%.0f'|format(c.duration) }} s)</span>
       {% if c.source == 'heuristiek' %}<span class="badge badge-warn">heuristiek</span>{% elif c.source == 'handmatig' %}<span class="badge">handmatig</span>{% endif %}
+      {% if c.framing_mode %}<span class="badge">{{ {'crop': 'gevuld', 'blur': 'passend', 'vertical': 'staand'}.get(c.framing_mode, c.framing_mode) }}</span>{% endif %}
       {% if c.category and c.category != 'overig' %}<span class="badge">{{ c.category }}</span>{% endif %}
       {% if c.status == 'failed' %}<span class="badge badge-error">render mislukt</span>{% elif c.status in ('pending', 'rendering') %}<span class="badge badge-accent">renderen</span>{% endif %}
       {% if c.posted_at %}<span class="badge badge-ok">gepost: {{ c.posted_platform }}</span>{% endif %}
@@ -71,6 +72,17 @@
             <div style="flex:1"><label for="end-{{ c.id }}">Einde (s)</label><input id="end-{{ c.id }}" name="end" type="text" inputmode="decimal" value="{{ c.end }}"></div>
           </div>
           <button class="btn btn-sm" type="submit" style="margin-top:.5rem">Trimmen en opnieuw renderen</button>
+        </form>
+        <form method="post" action="/clips/{{ c.id }}/framing">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <label for="mode-{{ c.id }}">Beeldvulling</label>
+          <select id="mode-{{ c.id }}" name="mode">
+            <option value="project" {% if not c.framing_choice %}selected{% endif %}>Zoals het project</option>
+            {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if c.framing_choice == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+          <label for="pos-{{ c.id }}" style="margin-top:.5rem">Positie uitsnede bij "Vullen" <span class="muted" style="font-weight:400">(links ↔ rechts)</span></label>
+          <input id="pos-{{ c.id }}" name="position" type="range" min="0" max="100" step="5" value="{{ ((c.crop_x if c.crop_x is not none else 0.5) * 100)|round|int }}" style="width:100%">
+          <button class="btn btn-sm" type="submit" style="margin-top:.4rem">Toepassen en opnieuw renderen</button>
         </form>
         <div class="row">
           <form method="post" action="/clips/{{ c.id }}/captions" class="inline">
