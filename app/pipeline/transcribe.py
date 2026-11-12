@@ -24,6 +24,23 @@ TIMEOUT = 6 * 3600
 
 
 # ---------------------------------------------------------------- in het kindproces
+def load_wav(path: Path):
+    """Lees een 16 kHz mono 16-bit wav als float32-array in [-1, 1].
+
+    Zo hoeft faster-whisper de audio niet zelf via PyAV te decoderen (nieuwere PyAV-versies
+    zijn daar niet compatibel mee).
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "rb") as wf:
+        if wf.getsampwidth() != 2 or wf.getnchannels() != 1:
+            raise WhisperError("Onverwacht audioformaat (verwacht 16-bit mono wav).")
+        frames = wf.readframes(wf.getnframes())
+    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe_in_process(
     audio: Path, model_name: str, device: str, compute: str, threads: int = 0,
     progress: Callable[[float], None] | None = None, vad: bool = True,
@@ -39,7 +56,8 @@ def transcribe_in_process(
             "en WHISPER_DEVICE/WHISPER_COMPUTE."
         ) from exc
     try:
-        segments, info = model.transcribe(str(audio), word_timestamps=True, vad_filter=vad, beam_size=5)
+        samples = load_wav(audio)
+        segments, info = model.transcribe(samples, word_timestamps=True, vad_filter=vad, beam_size=5)
         out_segments = []
         total = float(getattr(info, "duration", 0) or 0)
         for seg in segments:

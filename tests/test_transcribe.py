@@ -117,3 +117,34 @@ def test_sigill_twice_gives_cpu_message(tmp_path, sample_video, monkeypatch):
     with pytest.raises(WhisperError) as exc:
         tr.transcribe(sample_video, tmp_path / "transcript.json", "small")
     assert "CPU-instructie" in exc.value.message
+
+
+def test_in_process_passes_array_not_file(tmp_path, sample_video, monkeypatch):
+    """faster-whisper krijgt een numpy-array, zodat PyAV niet gebruikt wordt om audio te openen."""
+    import types
+
+    import numpy as np
+
+    wav = tr.extract_audio(sample_video, tmp_path / "audio.wav")
+    samples = tr.load_wav(wav)
+    assert samples.dtype == np.float32 and abs(len(samples) / 16000 - 8.0) < 0.1
+    assert 0.05 < np.abs(samples).max() <= 1.0
+    seen = {}
+
+    class FakeModel:
+        def __init__(self, *a, **k):
+            pass
+
+        def transcribe(self, audio, **kw):
+            seen["audio"] = audio
+            seen["kw"] = kw
+            word = types.SimpleNamespace(start=0.0, end=0.5, word=" hoi")
+            seg = types.SimpleNamespace(start=0.0, end=0.5, text=" hoi", words=[word])
+            return iter([seg]), types.SimpleNamespace(duration=8.0, language="nl")
+
+    import faster_whisper
+    monkeypatch.setattr(faster_whisper, "WhisperModel", FakeModel)
+    data = tr.transcribe_in_process(wav, "small", "cpu", "int8", vad=False)
+    assert isinstance(seen["audio"], np.ndarray)
+    assert seen["kw"]["word_timestamps"] is True and seen["kw"]["vad_filter"] is False
+    assert data["segments"][0]["words"][0]["word"] == "hoi"
