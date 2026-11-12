@@ -16,6 +16,20 @@ from app.estimation.estimator import fmt_views
 from app.pipeline.run import ACTIVE_STATUSES, STATUS_LABELS
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "web" / "templates"
+STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
+
+
+def _asset_version() -> str:
+    """Korte hash van de statische bestanden, zodat browsers na een update de nieuwe CSS/JS laden."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for p in sorted(STATIC_DIR.rglob("*")):
+        if p.is_file():
+            h.update(p.name.encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()[:10]
+
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.globals.update(
     STATUS_LABELS=STATUS_LABELS,
@@ -23,6 +37,7 @@ templates.env.globals.update(
     fmt_views=fmt_views,
     fmt_bytes=fmt_bytes,
     FRAMING_MODES=FRAMING_MODES,
+    asset_version=_asset_version(),
 )
 
 

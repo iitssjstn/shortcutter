@@ -38,13 +38,13 @@
     {% endif %}
 
     <div class="post-copy">
-      <div class="k">Titel</div>
-      <div class="copybox"><input id="ptitle-{{ c.id }}" type="text" readonly value="{{ c.title }}" aria-label="Posttitel"><button class="btn btn-sm" type="button" data-copy="ptitle-{{ c.id }}">Kopieer</button></div>
-      <div class="k">Beschrijving + hashtags</div>
-      <div class="copybox"><textarea id="ptext-{{ c.id }}" rows="5" readonly aria-label="Beschrijving en hashtags">{{ c.post_text }}</textarea><button class="btn btn-sm" type="button" data-copy="ptext-{{ c.id }}">Kopieer</button></div>
-      <form method="post" action="/clips/{{ c.id }}/generate-text" class="inline">
+      <div class="post-row"><label for="ptitle-{{ c.id }}">Titel</label><button class="btn btn-sm" type="button" data-copy="ptitle-{{ c.id }}">Kopieer</button></div>
+      <textarea id="ptitle-{{ c.id }}" class="post-field" rows="2" readonly>{{ c.title }}</textarea>
+      <div class="post-row"><label for="ptext-{{ c.id }}">Beschrijving</label><button class="btn btn-sm" type="button" data-copy="ptext-{{ c.id }}">Kopieer</button></div>
+      <textarea id="ptext-{{ c.id }}" class="post-field" rows="4" readonly>{{ c.post_text }}</textarea>
+      <form method="post" action="/clips/{{ c.id }}/generate-text">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="linklike" type="submit">{{ 'Opnieuw genereren' if c.description else 'Posttekst genereren met AI' }}</button>
+        <button class="btn btn-sm btn-block" type="submit">{{ '↻ Posttekst opnieuw genereren' if c.description else '✨ Posttekst genereren met AI' }}</button>
       </form>
     </div>
 

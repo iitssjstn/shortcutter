@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Shortcutter{% endblock %} · Shortcutter</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css">
-  <script src="/static/js/htmx.min.js" defer></script>
-  <script src="/static/js/app.js" defer></script>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ asset_version }}">
+  <script src="/static/js/htmx.min.js?v={{ asset_version }}" defer></script>
+  <script src="/static/js/app.js?v={{ asset_version }}" defer></script>
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 {% if user %}
