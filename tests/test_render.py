@@ -69,15 +69,108 @@ def test_landscape_without_faces_uses_blur(sample_video):
     assert fr.mode == "blur"
 
 
-def test_missing_cascade_falls_back_to_blur(sample_video, monkeypatch):
+def test_no_detector_falls_back_to_blur(sample_video, monkeypatch):
+    monkeypatch.setattr(framing, "_detector", lambda: None)
+    ratio, fx = framing.detect_faces(sample_video, 0, 2)
+    assert ratio == -1 and fx is None
+    assert framing.choose_framing(sample_video, 1280, 720, 0, 2).mode == "blur"
+    # 'vullen' werkt ook zonder detector: uitsnede in het midden
+    assert framing.choose_framing(sample_video, 1280, 720, 0, 2, force_mode="crop").face_x == 0.5
+
+
+def test_detector_chain(monkeypatch, tmp_path):
+    framing._detector_cache.clear()
+    det = framing._detector()
+    assert det is not None and det.name == "yunet"
+    # zonder YuNet-model: terugval op Haar
+    framing._detector_cache.clear()
+    monkeypatch.setattr(framing, "MODEL_PATH", tmp_path / "bestaat-niet.onnx")
+    det = framing._detector()
+    assert det is not None and det.name == "haar"
+    # zonder model en zonder cascade: geen detector
+    framing._detector_cache.clear()
+
     class Empty:
         def empty(self):
             return True
 
     monkeypatch.setattr(framing, "_cascade", lambda: Empty())
-    ratio, fx = framing.detect_faces(sample_video, 0, 2)
-    assert ratio == -1 and fx is None
-    assert framing.choose_framing(sample_video, 1280, 720, 0, 2).mode == "blur"
+    assert framing._detector() is None
+    framing._detector_cache.clear()
+
+
+def test_pick_track_follows_main_person():
+    # hoofdpersoon (groot) beweegt van 0.3 naar 0.5; een klein gezicht staat vast op 0.9
+    samples = []
+    for i in range(20):
+        x = 0.3 + i * 0.01
+        samples.append((i * 0.25, [(x, 0.4, 0.15, 0.9), (0.9, 0.2, 0.03, 0.7)]))
+    samples[5] = (1.25, [(0.9, 0.2, 0.03, 0.7)])  # hoofdpersoon kort niet gevonden
+    track = framing.pick_track(samples)
+    assert track[5][1] is None
+    assert track[0][1] == 0.3 and abs(track[-1][1] - 0.49) < 1e-9
+    assert all(x is None or x < 0.6 for _, x in track)
+
+
+def test_pick_track_reacquires_after_cut():
+    samples = [(i * 0.25, [(0.2, 0.5, 0.1, 0.9)]) for i in range(8)]
+    samples += [(2 + i * 0.25, [(0.8, 0.5, 0.1, 0.9)]) for i in range(8)]  # andere shot
+    track = framing.pick_track(samples)
+    assert track[-1][1] == 0.8
+
+
+def test_smooth_path_ignores_jitter_and_follows_movement():
+    jitter = [(i * 0.25, 0.5 + (0.01 if i % 2 else -0.01)) for i in range(20)]
+    path = framing.smooth_path(jitter)
+    assert max(p for _, p in path) - min(p for _, p in path) < 1e-9  # trilling genegeerd
+    move = [(i * 0.25, 0.2 + i * 0.03) for i in range(20)] + [(5.0, None)]
+    path = framing.smooth_path(move)
+    assert path[-1][1] > 0.6 and path[0][1] < 0.3
+    assert framing.smooth_path([(0, None), (0.25, None)]) is None
+
+
+def test_build_commands_interpolates():
+    cmds = framing.build_commands([(0.0, 0.25), (1.0, 0.75)], 1280, 404)
+    lines = [l for l in cmds.splitlines() if l]
+    assert lines[0] == "0.000 crop@fc x 118;"
+    assert lines[-1].endswith("crop@fc x 758;")
+    xs = [int(l.split()[-1].rstrip(";")) for l in lines]
+    assert xs == sorted(xs) and len(xs) > 10
+
+
+def test_tracking_render_moves_crop(tmp_path, sample_video, monkeypatch):
+    """De uitsnede beweegt mee met een (nep)gezicht dat van links naar rechts gaat."""
+
+    class MovingFace:
+        name = "nep"
+
+        def __init__(self):
+            self.n = 0
+
+        def detect(self, frame):
+            self.n += 1
+            return [(0.15 + 0.05 * self.n, 0.5, 0.1, 0.9)]
+
+    monkeypatch.setattr(framing, "_detector", lambda: MovingFace())
+    fr = framing.choose_framing(sample_video, 1280, 720, 1.0, 5.0, cmd_file="clip_01_crop.cmd")
+    assert fr.mode == "crop" and fr.commands and "sendcmd=f=clip_01_crop.cmd" in fr.filter
+    (tmp_path / "clip_01_crop.cmd").write_text(fr.commands)
+    out = render.render_raw(sample_video, 1.0, 5.0, fr.filter, tmp_path / "clip_01_raw.mp4", cwd=tmp_path)
+    assert (media.probe(out)["width"], media.probe(out)["height"]) == (1080, 1920)
+
+    def expected(src_t, x):
+        raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-ss", str(src_t), "-i", str(sample_video), "-frames:v", "1",
+                              "-vf", f"crop=404:720:{x}:0,scale=1080:1920", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                             capture_output=True, check=True).stdout
+        return np.frombuffer(raw, dtype=np.uint8).reshape(1920, 1080, 3).astype(int)
+
+    first_x = int(fr.commands.splitlines()[0].split()[-1].rstrip(";"))
+    last_x = int(fr.commands.strip().splitlines()[-1].split()[-1].rstrip(";"))
+    assert last_x > first_x + 300
+    early = frame_at(out, 0.0).astype(int)
+    late = frame_at(out, 3.9).astype(int)
+    assert np.abs(early - expected(1.0, first_x)).mean() < 15
+    assert np.abs(late - expected(4.9, last_x)).mean() < 15
 
 
 def test_crop_filter_clamps():

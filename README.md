@@ -142,6 +142,9 @@ bestaande sleutels niet meer ontsleuteld worden en moet je ze opnieuw invullen.
   Engels voor meer bereik; te wijzigen bij Instellingen). Voor bestaande clips: "Posttekst voor alle clips".
 - **Beeld niet gevuld (16:9 klein in 9:16)**: kies bij Beeldvulling "Vullen" (per project, als standaard bij
   Instellingen, of per clip met een schuif voor de positie). "Automatisch" vult alleen als er een gezicht in beeld is.
+  Gezichten worden gevonden met YuNet (een klein neuraal netwerk in OpenCV, met Haar als terugval). De uitsnede
+  volgt de hoofdpersoon soepel; kleine bewegingen worden genegeerd zodat het beeld rustig blijft. Met de schuif
+  kies je een vaste positie in plaats van volgen.
 - **Render mislukt**: de ruwe ge-cropte versie en de `.ass` blijven downloadbaar; klik op *Opnieuw renderen*.
 - **yt-dlp verouderd**: elke image-build haalt de nieuwste yt-dlp. Start de workflow handmatig
   (Actions → Docker image → Run workflow) en doe daarna `docker compose pull && docker compose up -d`.

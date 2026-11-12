@@ -110,15 +110,22 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
     words = all_words(transcript)
     try:
         mode = clip.framing_choice or project.framing or "auto"
+        cmd_name = f"{base}_crop.cmd"
         fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end,
-                                    force_mode=mode, face_x=clip.crop_x)
+                                    force_mode=mode, face_x=clip.crop_x, cmd_file=cmd_name)
+        cmd_path = out_dir / cmd_name
+        if fr.commands:
+            cmd_path.write_text(fr.commands)
+        else:
+            cmd_path.unlink(missing_ok=True)
         clip.framing_mode = fr.mode
         captions.write_ass(ass, words, clip.start, clip.end, project.caption_style)
         clip.ass_path = ass.name
         for p in (final,):
             if p.exists():
                 p.unlink()
-        render.render_raw(source, clip.start, clip.end, fr.filter, raw, has_audio=info.get("has_audio", True))
+        render.render_raw(source, clip.start, clip.end, fr.filter, raw, has_audio=info.get("has_audio", True),
+                          cwd=out_dir)
         clip.raw_path = raw.name
         media.thumbnail(raw, thumb, at=min(1.0, clip.duration / 2))
         clip.thumb_path = thumb.name if thumb.exists() else None

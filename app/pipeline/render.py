@@ -26,21 +26,22 @@ def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 3600) -> None:
 
 
 def render_raw(
-    source: Path, start: float, end: float, filter_complex: str, out: Path, has_audio: bool = True
+    source: Path, start: float, end: float, filter_complex: str, out: Path, has_audio: bool = True,
+    cwd: Path | None = None,
 ) -> Path:
     """Knip (input-seek), frame naar 1080x1920, normaliseer het geluid (loudnorm I=-16)."""
     dur = max(0.1, end - start)
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error", "-nostdin",
-        "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", str(source),
+        "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", str(Path(source).resolve()),
         "-filter_complex", filter_complex, "-map", "[v]",
     ]
     if has_audio:
         cmd += ["-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
     else:
         cmd += ["-an"]
-    cmd += X264 + ["-movflags", "+faststart", str(out)]
-    _run(cmd)
+    cmd += X264 + ["-movflags", "+faststart", str(Path(out).resolve())]
+    _run(cmd, cwd=cwd)
     if not out.exists() or out.stat().st_size == 0:
         raise RenderError("ffmpeg gaf geen uitvoerbestand.")
     return out
