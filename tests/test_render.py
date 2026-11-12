@@ -209,3 +209,44 @@ def test_fill_render_has_no_blur_bars(tmp_path, sample_video):
         results[mode] = np.abs(f[:400] - exp[:400]).mean()
     assert results["crop"] < 12, results
     assert results["blur"] > results["crop"] * 3, results
+
+
+class _FixedFace:
+    """Nep-detector met een vaste facecam linksboven."""
+    name = "nep"
+
+    def __init__(self, faces):
+        self.faces = faces
+
+    def detect(self, frame):
+        return list(self.faces)
+
+
+def test_split_regions():
+    cam, game = framing.split_regions(1920, 1080, (0.12, 0.2, 0.06), game_x=0.5)
+    cw, ch, x, y = cam
+    assert abs(cw / ch - 1080 / 672) < 0.02 and x == 0 and y >= 0
+    assert x <= 0.12 * 1920 <= x + cw and y <= 0.2 * 1080 <= y + ch  # gezicht valt binnen de facecam-uitsnede
+    gw, gh, gx, gy = game
+    assert gh == 1080 and abs(gw / gh - 1080 / 1248) < 0.01 and abs((gx + gw / 2) - 960) <= 2
+    _, (gw2, _, gx2, _) = framing.split_regions(1920, 1080, (0.12, 0.2, 0.06), game_x=1.0)
+    assert gx2 + gw2 == 1920  # gameplay helemaal naar rechts
+
+
+def test_split_render(tmp_path, sample_video, monkeypatch):
+    monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([(0.15, 0.25, 0.08, 0.9)]))
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split")
+    assert fr.mode == "split" and "vstack" in fr.filter
+    out = render.render_raw(sample_video, 0.5, 2.5, fr.filter, tmp_path / "clip_01_raw.mp4")
+    p = media.probe(out)
+    assert (p["width"], p["height"]) == (1080, 1920)
+
+
+def test_split_without_face_falls_back_to_fill(sample_video, monkeypatch):
+    monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([]))
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split", face_x=0.2)
+    assert fr.mode == "crop" and fr.face_x == 0.2
+
+
+def test_split_vertical_source_stays_vertical(sample_video):
+    assert framing.choose_framing(sample_video, 720, 1280, 0, 3, force_mode="split").mode == "vertical"

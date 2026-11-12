@@ -145,6 +145,8 @@ bestaande sleutels niet meer ontsleuteld worden en moet je ze opnieuw invullen.
   Gezichten worden gevonden met YuNet (een klein neuraal netwerk in OpenCV, met Haar als terugval). De uitsnede
   volgt de hoofdpersoon soepel; kleine bewegingen worden genegeerd zodat het beeld rustig blijft. Met de schuif
   kies je een vaste positie in plaats van volgen.
+- **Gaming / facecam**: kies "Gesplitst". Boven komt de facecam (uitgesneden rond het gevonden gezicht), onder
+  de gameplay; met de schuif verschuif je de gameplay naar links of rechts. Zonder gevonden gezicht wordt het "Vullen".
 - **Render mislukt**: de ruwe ge-cropte versie en de `.ass` blijven downloadbaar; klik op *Opnieuw renderen*.
 - **yt-dlp verouderd**: elke image-build haalt de nieuwste yt-dlp. Start de workflow handmatig
   (Actions → Docker image → Run workflow) en doe daarna `docker compose pull && docker compose up -d`.

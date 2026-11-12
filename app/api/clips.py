@@ -62,7 +62,7 @@ def clip_thumb(cid: int, user: User = Depends(require_user), db: Session = Depen
 def _rescore(clip: Clip) -> None:
     t = load_transcript(clip.project_id) or {"segments": []}
     feats = compute_features(clip.start, clip.end, clip.subscores, all_words(t),
-                             1.0 if clip.framing_mode == "crop" else None)
+                             1.0 if clip.framing_mode in ("crop", "split") else None)
     clip.features_json = json.dumps(feats)
     clip.viral_score = viral_score(feats)
 
@@ -128,7 +128,7 @@ def set_framing(
         raise HTTPException(400, "Onbekende beeldvulling.")
     clip.framing_choice = None if mode == "project" else mode
     clip.crop_x = None
-    if mode == "crop" and position.strip():
+    if mode in ("crop", "split") and position.strip():
         try:
             clip.crop_x = min(1.0, max(0.0, float(position) / 100))
         except ValueError as exc:

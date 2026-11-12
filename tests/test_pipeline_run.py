@@ -240,3 +240,30 @@ def test_framing_choices_and_reframe(project_factory, settings, sample_video, mo
         assert c.framing_mode == "crop" and c.framing_choice is None and c.crop_x is None and c.status == "ready"
     db.close()
     assert admin_client.post(f"/projects/{pid}/reframe", data={"framing": "zoom"}).status_code == 400
+
+
+def test_split_mode_via_clip_route(project_factory, settings, sample_video, monkeypatch, admin_client):
+    from app.pipeline import framing
+
+    class Cam:
+        name = "nep"
+
+        def detect(self, frame):
+            return [(0.15, 0.25, 0.08, 0.9)]
+
+    monkeypatch.setattr(framing, "_detector", lambda: Cam())
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+    pid = project_factory()
+    _put_source(settings, pid, sample_video)
+    run_job_once()
+    db = new_session()
+    cid = db.scalars(select(Clip).where(Clip.project_id == pid)).first().id
+    db.close()
+    assert "Gesplitst (facecam boven, gameplay onder)" in admin_client.get(f"/projects/{pid}").text
+    assert admin_client.post(f"/clips/{cid}/framing", data={"mode": "split", "position": "70"}).status_code == 303
+    run_job_once()
+    db = new_session()
+    c = db.get(Clip, cid)
+    assert c.framing_mode == "split" and c.framing_choice == "split" and c.crop_x == 0.7 and c.status == "ready"
+    db.close()
+    assert "gesplitst" in admin_client.get(f"/projects/{pid}").text

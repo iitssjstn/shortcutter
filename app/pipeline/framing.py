@@ -201,6 +201,58 @@ def smooth_path(track: list[tuple[float, float | None]], window: int = 2, dead_z
     return out
 
 
+def main_face_box(samples: list[Sample], track: list[tuple[float, float | None]]) -> tuple[float, float, float] | None:
+    """Mediane (cx, cy, breedte) van het gezicht van de hoofdpersoon, als fracties van het frame."""
+    boxes = []
+    for (_, faces), (_, x) in zip(samples, track):
+        if x is None:
+            continue
+        f = next((f for f in faces if f[0] == x), None)
+        if f:
+            boxes.append(f)
+    if not boxes:
+        return None
+    return (statistics.median(b[0] for b in boxes), statistics.median(b[1] for b in boxes),
+            statistics.median(b[2] for b in boxes))
+
+
+# Gesplitste weergave: facecam boven, gameplay onder
+SPLIT_TOP_H = 672
+SPLIT_BOTTOM_H = OUT_H - SPLIT_TOP_H
+
+
+def _even(v: float) -> int:
+    return max(2, int(v) // 2 * 2)
+
+
+def split_regions(src_w: int, src_h: int, box: tuple[float, float, float], game_x: float = 0.5):
+    """Bereken (facecam-uitsnede, gameplay-uitsnede) als (w, h, x, y) in bronpixels."""
+    cx, cy, size = box
+    aspect_top = OUT_W / SPLIT_TOP_H
+    ch = min(src_h, max(120.0, size * src_w * 3.2))
+    cw = ch * aspect_top
+    if cw > src_w:
+        cw, ch = src_w, src_w / aspect_top
+    cw, ch = _even(cw), _even(ch)
+    x = max(0, min(src_w - cw, int(cx * src_w - cw / 2)))
+    y = max(0, min(src_h - ch, int(cy * src_h - ch * 0.45)))
+    aspect_bot = OUT_W / SPLIT_BOTTOM_H
+    gh = src_h // 2 * 2
+    gw = _even(min(src_w, gh * aspect_bot))
+    gx = max(0, min(src_w - gw, int(game_x * src_w - gw / 2)))
+    return (cw, ch, x // 2 * 2, y // 2 * 2), (gw, gh, gx // 2 * 2, 0)
+
+
+def split_filter(src_w: int, src_h: int, box: tuple[float, float, float], game_x: float = 0.5) -> str:
+    (cw, ch, x, y), (gw, gh, gx, gy) = split_regions(src_w, src_h, box, game_x)
+    return (
+        "[0:v]split=2[cam][game];"
+        f"[cam]crop={cw}:{ch}:{x}:{y},scale={OUT_W}:{SPLIT_TOP_H},setsar=1[top];"
+        f"[game]crop={gw}:{gh}:{gx}:{gy},scale={OUT_W}:{SPLIT_BOTTOM_H},setsar=1[bot];"
+        "[top][bot]vstack=inputs=2,fps=30[v]"
+    )
+
+
 def detect_faces(video: Path, start: float, end: float, step: float = TRACK_STEP) -> tuple[float, float | None]:
     """Geeft (aandeel metingen met de hoofdpersoon, mediane x) terug; (-1, None) zonder detector."""
     samples = sample_faces(video, start, end, step)
@@ -278,7 +330,7 @@ def blur_filter() -> str:
     )
 
 
-MODES = ("auto", "crop", "blur")
+MODES = ("auto", "crop", "blur", "split")
 
 
 def _tracked(src_w: int, src_h: int, track, cmd_file: str, ratio: float) -> Framing:
@@ -320,13 +372,20 @@ def choose_framing(
         return Framing("vertical", vertical_filter())
     if mode == "blur":
         return Framing("blur", blur_filter())
-    if face_x is not None:  # gebruiker koos zelf een positie: vaste uitsnede
+    if face_x is not None and mode != "split":  # gebruiker koos zelf een positie: vaste uitsnede
         fx = min(1.0, max(0.0, face_x))
         return Framing("crop", crop_filter(src_w, src_h, fx), 1.0, fx)
     samples = sample_faces(video, start, end)
     track = pick_track(samples) if samples else []
     hits = sum(1 for _, x in track if x is not None)
     ratio = hits / len(track) if track else (-1.0 if samples is None else 0.0)
+    if mode == "split":
+        box = main_face_box(samples or [], track) if hits else None
+        game_x = 0.5 if face_x is None else min(1.0, max(0.0, face_x))
+        if box is not None:
+            return Framing("split", split_filter(src_w, src_h, box, game_x), max(ratio, 0.0), box[0])
+        # geen facecam gevonden: dan maar vullen (op de gekozen positie)
+        return Framing("crop", crop_filter(src_w, src_h, game_x), 0.0, game_x)
     if hits and (mode == "crop" or ratio >= FACE_RATIO):
         return _tracked(src_w, src_h, track, cmd_file, ratio)
     if mode == "crop":

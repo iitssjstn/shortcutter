@@ -63,7 +63,7 @@ def stats_page(request: Request, user: User = Depends(require_user), db: Session
         groups["Categorie"][c.category or "overig"].append(c)
         groups["Duur"][_dur_bucket(c.duration)].append(c)
         groups["Hook"][_hook_type(c)].append(c)
-        groups["Framing"][{"crop": "crop rond gezicht", "blur": "wazige achtergrond", "vertical": "staand"}.get(c.framing_mode or "", "onbekend")].append(c)
+        groups["Framing"][{"crop": "crop rond gezicht", "blur": "wazige achtergrond", "vertical": "staand", "split": "gesplitst"}.get(c.framing_mode or "", "onbekend")].append(c)
         groups["Gekozen door"][c.source].append(c)
     breakdown = {}
     for name, g in groups.items():

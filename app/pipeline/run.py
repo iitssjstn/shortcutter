@@ -130,7 +130,7 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
         media.thumbnail(raw, thumb, at=min(1.0, clip.duration / 2))
         clip.thumb_path = thumb.name if thumb.exists() else None
         feats = compute_features(clip.start, clip.end, clip.subscores, words,
-                                 fr.face_ratio if fr.mode == "crop" else None)
+                                 fr.face_ratio if fr.mode in ("crop", "split") else None)
         clip.features_json = json.dumps(feats)
         clip.viral_score = viral_score(feats)
         db.commit()

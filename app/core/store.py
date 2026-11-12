@@ -21,6 +21,7 @@ FRAMING_MODES = {
     "auto": "Automatisch (vullen als er een gezicht in beeld is)",
     "crop": "Vullen (inzoomen en bijsnijden tot 9:16)",
     "blur": "Passend (hele beeld op wazige achtergrond)",
+    "split": "Gesplitst (facecam boven, gameplay onder)",
 }
 CAPTION_STYLES = {
     "geel": "Wit met gele highlight",
