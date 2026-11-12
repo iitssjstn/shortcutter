@@ -48,12 +48,39 @@ def finish(db: Session, job: Job, error: str | None = None) -> None:
     db.commit()
 
 
+MAX_ATTEMPTS = 2
+
+
 def recover(db: Session) -> int:
-    """Na een herstart: zet jobs die 'running' waren terug in de wachtrij."""
+    """Na een herstart: zet jobs die 'running' waren terug in de wachtrij.
+
+    Een job die al MAX_ATTEMPTS keer onderbroken is (bv. omdat de container steeds
+    crasht op dezelfde taak) wordt als mislukt gemarkeerd in plaats van opnieuw gestart.
+    """
     jobs = db.scalars(select(Job).where(Job.status == "running")).all()
     for j in jobs:
-        j.status = "queued"
-        j.started_at = None
+        j.attempts = (j.attempts or 0) + 1
+        if j.attempts >= MAX_ATTEMPTS:
+            j.status = "failed"
+            j.error = "onderbroken"
+            j.finished_at = utcnow()
+            project = db.get(Project, j.project_id)
+            msg = ("De server stopte onverwacht tijdens deze taak, ook bij een tweede poging "
+                   "(vaak: geheugen vol). Kies een kleiner Whisper-model bij Instellingen en probeer opnieuw.")
+            if project is not None and j.kind == "process":
+                project.status = "failed"
+                project.error = msg
+                project.error_kind = "onderbroken"
+            elif j.clip_id:
+                from app.core.models import Clip
+
+                clip = db.get(Clip, j.clip_id)
+                if clip is not None:
+                    clip.status = "failed"
+                    clip.render_error = msg
+        else:
+            j.status = "queued"
+            j.started_at = None
     db.commit()
     return len(jobs)
 

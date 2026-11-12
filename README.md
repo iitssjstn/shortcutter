@@ -51,6 +51,9 @@ Alleen niet-geheime instellingen staan in de compose:
 | `WHISPER_MODEL` | `small` | `tiny`, `base`, `small`, `medium`, `large-v3`… Ook te wijzigen in Instellingen (admin). |
 | `WHISPER_DEVICE` | `cpu` | `cuda` voor een NVIDIA-GPU (vereist een GPU-runtime). |
 | `WHISPER_COMPUTE` | `int8` | `int8` op cpu, `float16` op cuda. |
+| `WHISPER_THREADS` | `0` | Aantal CPU-threads voor Whisper (0 = automatisch). |
+| `CT2_FORCE_CPU_ISA` | automatisch | `GENERIC` (geen AVX) of `AVX` voor oude CPU's. Wordt normaal zelf gedetecteerd. |
+| `WHISPER_VAD` | `true` | `false` schakelt de spraakdetectie (onnxruntime) uit. |
 | `COOKIE_SECURE` | `false` | Zet op `true` zodra de app achter HTTPS draait (reverse proxy). |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | IP van je reverse proxy, zodat rate limiting het echte client-IP ziet. |
 
@@ -129,6 +132,12 @@ bestaande sleutels niet meer ontsleuteld worden en moet je ze opnieuw invullen.
 - **LLM-API faalt**: het project wordt gewoon klaar met de heuristiek en een waarschuwing.
 - **Whisper-model laden mislukt**: kies een kleiner model bij Instellingen en klik op *Opnieuw proberen*.
   De eerste keer moet de container het model kunnen downloaden van Hugging Face.
+- **Container crashte tijdens transcriberen / oude CPU**: Whisper draait in een apart proces, dus een
+  crash neemt de app niet meer mee. Op CPU's zonder AVX2 kiest de app zelf een passende instructieset;
+  crasht Whisper toch op een CPU-instructie, dan probeert hij het één keer opnieuw in een veilige modus
+  (zonder AVX, float32, zonder spraakdetectie). Dat is trager maar werkt op elke x86-CPU. Raakt het
+  geheugen vol, dan krijg je daarvan een melding: kies dan een kleiner model (`base` of `tiny`).
+  Een taak die de server twee keer laat herstarten, wordt als mislukt gemarkeerd in plaats van eindeloos opnieuw te starten.
 - **Render mislukt**: de ruwe ge-cropte versie en de `.ass` blijven downloadbaar; klik op *Opnieuw renderen*.
 - **yt-dlp verouderd**: elke image-build haalt de nieuwste yt-dlp. Start de workflow handmatig
   (Actions → Docker image → Run workflow) en doe daarna `docker compose pull && docker compose up -d`.

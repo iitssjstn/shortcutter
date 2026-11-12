@@ -39,9 +39,27 @@ def init_db(db_path: str) -> Engine:
     from app.core import models  # noqa: F401  (registreert de tabellen)
 
     Base.metadata.create_all(engine)
+    _migrate(engine)
     _engine = engine
     _SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
     return engine
+
+
+# Kolommen die later zijn toegevoegd: (tabel, kolom, SQL-type met default)
+_ADDED_COLUMNS = [
+    ("jobs", "attempts", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _migrate(engine: Engine) -> None:
+    """Voeg ontbrekende kolommen toe aan een bestaande SQLite-database."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, col, ddl in _ADDED_COLUMNS:
+            if table in insp.get_table_names() and col not in {c["name"] for c in insp.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
 
 
 def get_engine() -> Engine:

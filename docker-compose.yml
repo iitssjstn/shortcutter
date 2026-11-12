@@ -20,6 +20,9 @@ services:
       WHISPER_MODEL: small        # tiny | base | small | medium | large-v3 (ook te wijzigen in Instellingen)
       WHISPER_DEVICE: cpu         # cpu of cuda
       WHISPER_COMPUTE: int8       # int8 (cpu), float16 (cuda)
+      # Oude CPU? De app detecteert dit zelf en valt bij een crash terug op een veilige modus.
+      # Handmatig forceren kan met: CT2_FORCE_CPU_ISA: GENERIC  (geen AVX), WHISPER_VAD: "false"
+      # WHISPER_THREADS: "2"      # minder CPU-threads (0 = automatisch)
       COOKIE_SECURE: "false"      # "true" zodra de app achter HTTPS (reverse proxy) draait
       # FORWARDED_ALLOW_IPS: "172.18.0.1"  # IP van je reverse proxy, voor het juiste client-IP
     healthcheck:

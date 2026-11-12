@@ -187,7 +187,8 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
             _set(db, project, None, 12 + int(frac * 43))
 
         transcript = transcribe(
-            source, out_dir / "transcript.json", effective_whisper_model(db), s.whisper_device, s.whisper_compute, tprog
+            source, out_dir / "transcript.json", effective_whisper_model(db), s.whisper_device, s.whisper_compute, tprog,
+            threads=s.whisper_threads,
         )
 
         # 3. fragmentkeuze (alleen als er nog geen clips zijn, bv. bij opnieuw proberen)

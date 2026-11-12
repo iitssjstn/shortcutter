@@ -51,6 +51,7 @@
     {% if project.error_kind == 'download_blocked' %}Download geblokkeerd
     {% elif project.error_kind == 'download_failed' %}Downloaden mislukt
     {% elif project.error_kind == 'whisper' %}Transcriptie mislukt
+    {% elif project.error_kind == 'onderbroken' %}Verwerking onderbroken
     {% elif project.error_kind == 'source_missing' %}Bronbestand ontbreekt
     {% else %}Er ging iets mis{% endif %}
   </h2>
@@ -58,7 +59,7 @@
   {% if project.error_kind in ('download_blocked', 'download_failed', 'source_missing') %}
   <p class="muted">Upload het bronbestand zelf: het project gaat dan verder waar het was, zonder opnieuw te beginnen.</p>
   {% include "partials/upload_source.html" %}
-  {% elif project.error_kind == 'whisper' %}
+  {% elif project.error_kind in ('whisper', 'onderbroken') %}
   <p class="muted">Controleer het Whisper-model bij Instellingen (een kleiner model zoals <code>small</code> of <code>base</code> gebruikt minder geheugen) en probeer het opnieuw.</p>
   {% endif %}
   <form method="post" action="/projects/{{ project.id }}/retry" class="inline">
