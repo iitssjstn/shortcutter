@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Gebruikers{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Gebruikers</h1><p class="muted">Alleen op uitnodiging. Links zijn 48 uur geldig en werken één keer.</p></div></div>
+
+{% if new_link %}
+<section class="card" style="border-color:var(--ok)">
+  <h2>{{ 'Uitnodigingslink' if new_link_kind == 'uitnodiging' else 'Resetlink' }} voor {{ new_link_user }}</h2>
+  <p class="muted" style="font-size:.9rem">Kopieer deze link en stuur hem zelf door. Hij wordt maar één keer getoond.</p>
+  <div class="copybox"><input id="new-link" type="text" readonly value="{{ new_link }}"><button class="btn" type="button" data-copy="new-link">Kopiëren</button></div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Uitnodigen</h2>
+  <form method="post" action="/users/invite" class="row" style="align-items:flex-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="flex:2;min-width:180px"><label for="inv-username">Gebruikersnaam</label><input id="inv-username" name="username" type="text" required pattern="[A-Za-z0-9_.\-]{3,32}"></div>
+    <div style="flex:1;min-width:120px"><label for="inv-role">Rol</label><select id="inv-role" name="role"><option value="user">user</option><option value="admin">admin</option></select></div>
+    <button class="btn btn-primary" type="submit">Maak uitnodigingslink</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Alle gebruikers</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Gebruiker</th><th>Rol</th><th>Status</th><th>Laatst actief</th><th>Acties</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><strong>{{ u.username }}</strong>{% if u.id == user.id %} <span class="muted">(jij)</span>{% endif %}<br><span class="muted" style="font-size:.8rem">{{ u.email or '' }}</span></td>
+        <td>
+          <form method="post" action="/users/{{ u.id }}/role" class="row">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="role" aria-label="Rol van {{ u.username }}" style="width:auto">
+              <option value="user" {% if u.role == 'user' %}selected{% endif %}>user</option>
+              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
+            </select>
+            <button class="btn btn-sm" type="submit">Wijzig</button>
+          </form>
+        </td>
+        <td>{% if u.is_active %}<span class="badge badge-ok">actief</span>{% else %}<span class="badge badge-error">gedeactiveerd</span>{% endif %}{% if not u.password_hash %} <span class="badge">geen wachtwoord</span>{% endif %}</td>
+        <td>{{ u.last_active_at|dt }}</td>
+        <td>
+          <div class="row">
+            <form method="post" action="/users/{{ u.id }}/active" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="active" value="{{ '0' if u.is_active else '1' }}">
+              <button class="btn btn-sm" type="submit">{{ 'Deactiveren' if u.is_active else 'Activeren' }}</button>
+            </form>
+            <form method="post" action="/users/{{ u.id }}/reset-password" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm" type="submit">Wachtwoord resetten</button>
+            </form>
+            <form method="post" action="/users/{{ u.id }}/delete" class="inline" data-confirm="{{ u.username }} en al diens projecten definitief verwijderen?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{% if invites %}
+<section class="card">
+  <h2>Openstaande links</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Gebruiker</th><th>Soort</th><th>Verloopt</th><th></th></tr></thead>
+    <tbody>{% for i in invites %}
+      <tr><td>{{ i.username }}</td><td>{{ 'reset' if i.user_id else 'uitnodiging (' ~ i.role ~ ')' }}</td><td>{{ i.expires_at|dt }}</td>
+      <td><form method="post" action="/users/invites/{{ i.id }}/revoke" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit">Intrekken</button></form></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}

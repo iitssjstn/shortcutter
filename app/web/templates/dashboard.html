@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="muted">Zet een YouTube-video of eigen bestand om in verticale shorts.</p>
+  </div>
+</div>
+
+{% if no_llm_key %}
+<div class="flash flash-warn">
+  <strong>Geen LLM-sleutel ingesteld.</strong> Fragmenten worden gekozen met een eenvoudige heuristiek (spreekdichtheid).
+  {% if user.is_admin %}<a href="/keys">Voeg een sleutel toe</a> voor betere clipkeuze.{% else %}Vraag de beheerder om een sleutel toe te voegen.{% endif %}
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Nieuw project</h2>
+    <form method="post" action="/projects" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="url">YouTube-link</label>
+        <input id="url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=…" inputmode="url">
+      </div>
+      <div class="or">of</div>
+      <div class="field">
+        <label for="file">Videobestand uploaden</label>
+        <input id="file" name="file" type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.mp4,.mov,.mkv,.webm,.m4v">
+      </div>
+      <div class="inline-fields">
+        <div class="field"><label for="num_clips">Clips</label>
+          <input id="num_clips" name="num_clips" type="number" min="1" max="20" value="{{ settings.default_num_clips }}"></div>
+        <div class="field"><label for="min_dur">Min. duur (s)</label>
+          <input id="min_dur" name="min_dur" type="number" min="5" max="120" value="{{ settings.default_min_dur }}"></div>
+        <div class="field"><label for="max_dur">Max. duur (s)</label>
+          <input id="max_dur" name="max_dur" type="number" min="10" max="180" value="{{ settings.default_max_dur }}"></div>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Start project</button>
+      <p class="hint" style="margin-top:.6rem">Gebruik alleen video's van jezelf of waarvoor je toestemming hebt.</p>
+    </form>
+  </section>
+
+  {% if user.is_admin %}
+  <section class="card">
+    <h2>Wachtrij <span class="badge">{{ full_queue|length }}</span></h2>
+    {% if full_queue %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Project</th><th>Gebruiker</th><th>Taak</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for q in full_queue %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{% if q.project %}<a href="/projects/{{ q.project.id }}">{{ (q.project.title or 'Project ' ~ q.project.id)|truncate(40) }}</a>{% endif %}</td>
+          <td>{{ q.owner }}</td>
+          <td>{{ 'verwerken' if q.job.kind == 'process' else 'clip renderen' }}</td>
+          <td>{% if q.job.status == 'running' %}<span class="badge badge-accent">bezig</span>{% else %}<span class="badge">wacht</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="muted">De wachtrij is leeg. De worker verwerkt één job tegelijk.</p>
+    {% endif %}
+  </section>
+  {% else %}
+  <section class="card">
+    <h2>Zo werkt het</h2>
+    <ol class="muted" style="padding-left:1.2rem;margin:0">
+      <li>Plak een link of upload een video.</li>
+      <li>De server downloadt, transcribeert en kiest de beste fragmenten.</li>
+      <li>Bekijk, trim en download je clips. Posten doe je zelf.</li>
+      <li>Vul later de echte views in: de schatting wordt daarmee beter.</li>
+    </ol>
+  </section>
+  {% endif %}
+</div>
+
+<section>
+  <div class="page-head" style="margin:1rem 0 .75rem">
+    <h2 style="margin:0">Projecten</h2>
+    {% if user.is_admin %}
+    <div class="row">
+      <a class="btn btn-sm {{ 'btn-primary' if scope != 'all' }}" href="/?scope=mine">Alleen mijn projecten</a>
+      <a class="btn btn-sm {{ 'btn-primary' if scope == 'all' }}" href="/?scope=all">Alle gebruikers</a>
+    </div>
+    {% endif %}
+  </div>
+  {% include "partials/project_list.html" %}
+</section>
+{% endblock %}

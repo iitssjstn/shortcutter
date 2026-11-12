@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Shortcutter{% endblock %} · Shortcutter</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+{% if user %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="brand-mark">▶</span>Shortcutter</a>
+    <nav class="nav" aria-label="Hoofdmenu">
+      <a href="/" class="{{ 'active' if nav == 'dashboard' }}">Dashboard</a>
+      <a href="/stats" class="{{ 'active' if nav == 'stats' }}">Statistieken</a>
+      <a href="/settings" class="{{ 'active' if nav == 'settings' }}">Instellingen</a>
+      {% if user.is_admin %}
+      <a href="/keys" class="{{ 'active' if nav == 'keys' }}">API-sleutels</a>
+      <a href="/users" class="{{ 'active' if nav == 'users' }}">Gebruikers</a>
+      {% endif %}
+      <a href="/account" class="{{ 'active' if nav == 'account' }}">Mijn account</a>
+    </nav>
+    <div class="userbox">
+      <span class="who muted">{{ user.username }}{% if user.is_admin %} <span class="badge">admin</span>{% endif %}</span>
+      <form method="post" action="/logout" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm" type="submit">Uitloggen</button>
+      </form>
+    </div>
+  </div>
+</header>
+{% endif %}
+<main>
+  <div id="flash">
+    {% if flash %}<div class="flash flash-{{ 'error' if flash.kind == 'error' else 'ok' }}" role="status">{{ flash.msg }}</div>{% endif %}
+  </div>
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

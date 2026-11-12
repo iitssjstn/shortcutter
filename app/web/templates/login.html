@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Inloggen{% endblock %}
+{% block content %}
+<div class="narrow">
+  <div class="card">
+    <h1><span class="brand-mark">▶</span> Shortcutter</h1>
+    <p class="muted">Log in om je projecten te bekijken.</p>
+    {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field"><label for="username">Gebruikersnaam</label>
+        <input id="username" name="username" type="text" autocomplete="username" value="{{ username or '' }}" required autofocus></div>
+      <div class="field"><label for="password">Wachtwoord</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Inloggen</button>
+    </form>
+  </div>
+  <p class="muted" style="text-align:center;font-size:.85rem">Geen account? Vraag de beheerder om een uitnodigingslink.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Mijn account{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Mijn account</h1><p class="muted">Ingelogd als <strong>{{ user.username }}</strong> ({{ user.role }}).</p></div></div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Wachtwoord wijzigen</h2>
+    <form method="post" action="/account/password">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label for="current">Huidig wachtwoord</label><input id="current" name="current" type="password" autocomplete="current-password" required></div>
+      <div class="field"><label for="password">Nieuw wachtwoord</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="12" required><div class="hint">Minimaal 12 tekens. Alle andere sessies worden uitgelogd.</div></div>
+      <div class="field"><label for="password2">Herhaal nieuw wachtwoord</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="12" required></div>
+      <button class="btn btn-primary" type="submit">Wachtwoord wijzigen</button>
+    </form>
+  </section>
+  <div>
+    <section class="card">
+      <h2>E-mail</h2>
+      <form method="post" action="/account/email">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field"><label for="email">E-mailadres <span class="muted">(optioneel)</span></label><input id="email" name="email" type="email" value="{{ user.email or '' }}"></div>
+        <button class="btn" type="submit">Opslaan</button>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Sessies</h2>
+      <div class="row">
+        <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Uitloggen</button></form>
+        <form method="post" action="/account/logout-all" class="inline" data-confirm="Op alle apparaten uitloggen?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-danger" type="submit">Uitloggen op alle apparaten</button></form>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

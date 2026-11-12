@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Eerste setup{% endblock %}
+{% block content %}
+<div class="narrow">
+  <div class="card">
+    <h1>Welkom bij Shortcutter</h1>
+    <p class="muted">Maak het eerste account aan. Dit account wordt automatisch beheerder.</p>
+    <div class="flash flash-warn">De setupcode staat in de containerlogs:<br><code>docker compose logs shortcutter</code></div>
+    {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/setup">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label for="setup_code">Setupcode</label>
+        <input id="setup_code" class="setup-code" name="setup_code" type="text" autocomplete="off" required autofocus></div>
+      <div class="field"><label for="username">Gebruikersnaam</label>
+        <input id="username" name="username" type="text" autocomplete="username" value="{{ username or '' }}" required pattern="[A-Za-z0-9_.\-]{3,32}"></div>
+      <div class="field"><label for="email">E-mail <span class="muted">(optioneel)</span></label>
+        <input id="email" name="email" type="email" autocomplete="email" value="{{ email or '' }}"></div>
+      <div class="field"><label for="password">Wachtwoord</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" required>
+        <div class="hint">Minimaal 12 tekens.</div></div>
+      <div class="field"><label for="password2">Herhaal wachtwoord</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password" minlength="12" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Account aanmaken</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

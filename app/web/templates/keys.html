@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}API-sleutels{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>API-sleutels</h1>
+    <p class="muted">Sleutels worden versleuteld opgeslagen en na opslaan nooit meer getoond. Bewerken = een nieuwe waarde invullen.
+      Master key: {{ 'Docker secret' if key_source == 'docker-secret' else 'data/.master_key' }}.</p>
+  </div>
+</div>
+
+<section class="card">
+  <h2>LLM <span class="badge badge-accent">aanbevolen</span></h2>
+  <p class="muted" style="font-size:.9rem">Voor de clipkeuze. Elke OpenAI-compatibele API werkt (standaard Groq). Je kunt meerdere configuraties opslaan; één is actief.</p>
+  {% if not llm %}<div class="flash flash-warn">Geen LLM-sleutel: de app valt terug op een heuristiek (spreekdichtheid).</div>{% endif %}
+  {% for c in llm %}
+  <div class="card" style="background:var(--surface-2);box-shadow:none">
+    <div class="row">
+      <strong>{{ c.name }}</strong>
+      {% if c.is_active %}<span class="badge badge-ok">actief</span>{% endif %}
+      <code>{{ c.mask }}</code>
+      <span class="spacer"></span>
+      <span id="test-{{ c.id }}">{% if c.last_test_status %}<span class="badge {{ 'badge-ok' if c.last_test_status == 'geldig' else ('badge-warn' if c.last_test_status == 'rate_limit' else 'badge-error') }}">laatste test: {{ c.last_test_status }}</span>{% endif %}</span>
+    </div>
+    <div class="muted" style="font-size:.85rem;margin:.35rem 0 .6rem">
+      {{ c.base_url }} · model <code>{{ c.model }}</code><br>
+      Toegevoegd {{ c.created_at|dt }} · gewijzigd {{ c.updated_at|dt }} · laatst gebruikt {{ c.last_used_at|dt }}
+    </div>
+    <div class="row">
+      <form method="post" action="/keys/{{ c.id }}/test" class="inline" hx-post="/keys/{{ c.id }}/test" hx-target="#test-{{ c.id }}" hx-swap="innerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm" type="submit">Test sleutel</button>
+      </form>
+      {% if not c.is_active %}
+      <form method="post" action="/keys/{{ c.id }}/activate" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm" type="submit">Maak actief</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/keys/{{ c.id }}/delete" class="inline" data-confirm="Deze sleutel verwijderen?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+      </form>
+    </div>
+    <details style="margin-top:.5rem">
+      <summary>Bewerken</summary>
+      <div class="details-body grid-2">
+        <form method="post" action="/keys/{{ c.id }}/edit">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="field"><label>Naam</label><input name="name" type="text" value="{{ c.name }}" required></div>
+          <div class="field"><label>Base-URL</label><input name="base_url" type="url" value="{{ c.base_url }}" required></div>
+          <div class="field"><label>Model</label><input name="model" type="text" value="{{ c.model }}" required></div>
+          <button class="btn btn-sm" type="submit">Opslaan</button>
+        </form>
+        <form method="post" action="/keys/{{ c.id }}/replace" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="field"><label>Nieuwe API-key</label><input name="api_key" type="password" autocomplete="new-password" required placeholder="Vul een nieuwe sleutel in"></div>
+          <button class="btn btn-sm" type="submit">Sleutel vervangen</button>
+        </form>
+      </div>
+    </details>
+  </div>
+  {% endfor %}
+  <details {% if not llm %}open{% endif %}>
+    <summary>LLM-configuratie toevoegen</summary>
+    <form method="post" action="/keys/llm" class="details-body" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="grid-2">
+        <div class="field"><label for="llm-name">Naam</label><input id="llm-name" name="name" type="text" value="Groq" required></div>
+        <div class="field"><label for="llm-base">Base-URL</label><input id="llm-base" name="base_url" type="url" value="{{ default_base }}" required></div>
+        <div class="field"><label for="llm-model">Model</label><input id="llm-model" name="model" type="text" value="{{ default_model }}" required></div>
+        <div class="field"><label for="llm-key">API-key</label><input id="llm-key" name="api_key" type="password" autocomplete="new-password" required placeholder="gsk_…"></div>
+      </div>
+      <label class="row" style="font-weight:500"><input type="checkbox" name="make_active" value="1" checked> Maak deze configuratie actief</label>
+      <button class="btn btn-primary" type="submit" style="margin-top:.5rem">Opslaan</button>
+    </form>
+  </details>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>YouTube Data API <span class="badge">optioneel</span></h2>
+    <p class="muted" style="font-size:.9rem">Om het kanaalgemiddelde automatisch op te halen (bij Instellingen).</p>
+    {% if youtube %}
+    <div class="row"><code>{{ youtube.mask }}</code><span class="muted" style="font-size:.85rem">toegevoegd {{ youtube.created_at|dt }} · laatst gebruikt {{ youtube.last_used_at|dt }}</span></div>
+    <div class="row" style="margin:.5rem 0">
+      <form method="post" action="/keys/{{ youtube.id }}/test" class="inline" hx-post="/keys/{{ youtube.id }}/test" hx-target="#test-{{ youtube.id }}" hx-swap="innerHTML">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm" type="submit">Test sleutel</button>
+      </form>
+      <form method="post" action="/keys/{{ youtube.id }}/delete" class="inline" data-confirm="Deze sleutel verwijderen?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+      </form>
+      <span id="test-{{ youtube.id }}"></span>
+    </div>
+    {% endif %}
+    <form method="post" action="/keys/youtube" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label for="yt-key">{{ 'Nieuwe sleutel' if youtube else 'API-key' }}</label>
+        <input id="yt-key" name="api_key" type="password" autocomplete="new-password" required placeholder="AIza…"></div>
+      <button class="btn" type="submit">{{ 'Vervangen' if youtube else 'Opslaan' }}</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>cookies.txt voor yt-dlp <span class="badge">optioneel</span></h2>
+    <p class="muted" style="font-size:.9rem">Alleen nodig als YouTube downloads blokkeert ("Sign in to confirm you're not a bot"). Exporteer de cookies in Netscape-formaat met een browserextensie. Wordt versleuteld opgeslagen en alleen tijdens een download kort naar schijf geschreven.</p>
+    {% if cookies %}
+    <div class="row"><code>{{ cookies.mask }}</code><span class="muted" style="font-size:.85rem">geüpload {{ cookies.updated_at|dt }} · laatst gebruikt {{ cookies.last_used_at|dt }}</span>
+      <form method="post" action="/keys/{{ cookies.id }}/delete" class="inline" data-confirm="cookies.txt verwijderen?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+      </form></div>
+    {% endif %}
+    <form method="post" action="/keys/cookies" enctype="multipart/form-data" style="margin-top:.5rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><input name="file" type="file" accept=".txt,text/plain" required aria-label="cookies.txt"></div>
+      <button class="btn" type="submit">{{ 'Vervangen' if cookies else 'Uploaden' }}</button>
+    </form>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Auditlog</h2>
+  {% if logs %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Wanneer</th><th>Wie</th><th>Actie</th><th>Waarop</th></tr></thead>
+    <tbody>{% for l in logs %}<tr><td>{{ l.created_at|dt }}</td><td>{{ l.username or '–' }}</td><td>{{ l.action.replace('_', ' ') }}</td><td>{{ l.target }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">Nog geen wijzigingen.</p>{% endif %}
+</section>
+{% endblock %}

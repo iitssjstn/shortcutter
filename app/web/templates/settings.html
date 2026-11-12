@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Instellingen{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Instellingen</h1></div></div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Persoonlijke standaardwaarden</h2>
+    <form method="post" action="/settings">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label for="channel_avg_views">Gemiddelde views per short (kanaalgemiddelde)</label>
+        <input id="channel_avg_views" name="channel_avg_views" type="number" min="1" value="{{ us.channel_avg_views }}">
+        <div class="hint">Basis voor de view-schatting. Een clip met een gemiddelde score krijgt dit als midden van de schatting.</div></div>
+      <div class="inline-fields">
+        <div class="field"><label for="default_num_clips">Aantal clips</label><input id="default_num_clips" name="default_num_clips" type="number" min="1" max="20" value="{{ us.default_num_clips }}"></div>
+        <div class="field"><label for="default_min_dur">Min. duur (s)</label><input id="default_min_dur" name="default_min_dur" type="number" min="5" max="120" value="{{ us.default_min_dur }}"></div>
+        <div class="field"><label for="default_max_dur">Max. duur (s)</label><input id="default_max_dur" name="default_max_dur" type="number" min="10" max="180" value="{{ us.default_max_dur }}"></div>
+      </div>
+      <div class="field"><label for="caption_style">Ondertitelstijl</label>
+        <select id="caption_style" name="caption_style">
+          {% for k, label in caption_styles.items() %}<option value="{{ k }}" {% if us.caption_style == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      <button class="btn btn-primary" type="submit">Opslaan</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Kanaalgemiddelde ophalen</h2>
+    {% if has_youtube_key %}
+    <p class="muted" style="font-size:.9rem">Haalt de mediaan van de views van je recente shorts (≤ 3 min) op via de YouTube Data API.</p>
+    <form method="post" action="/settings/channel-average">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label for="channel">Kanaal-ID of handle</label>
+        <input id="channel" name="channel" type="text" placeholder="@mijnkanaal of UC…" value="{{ us.channel_ref or '' }}" required></div>
+      <button class="btn" type="submit">Ophalen</button>
+    </form>
+    {% else %}
+    <p class="muted">Optioneel: met een YouTube Data API-sleutel kan het kanaalgemiddelde automatisch opgehaald worden.
+      {% if user.is_admin %}<a href="/keys">Sleutel toevoegen</a>.{% else %}Vraag de beheerder om een sleutel.{% endif %}</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if user.is_admin %}
+<section class="card">
+  <h2>Globale instellingen <span class="badge">admin</span></h2>
+  <form method="post" action="/settings/global">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <div>
+        <div class="field"><label for="whisper_model">Whisper-model</label>
+          <select id="whisper_model" name="whisper_model">
+            <option value="" {% if not g.whisper_model %}selected{% endif %}>Uit de omgeving (WHISPER_MODEL={{ env_whisper }})</option>
+            {% for m in whisper_models %}<option value="{{ m }}" {% if g.whisper_model == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+          </select>
+          <div class="hint">Nu actief: <code>{{ effective_whisper }}</code> op {{ whisper_device }}/{{ whisper_compute }}. Grotere modellen zijn nauwkeuriger maar trager en gebruiken meer geheugen.</div></div>
+        <div class="field"><label for="llm_model_override">LLM-model</label>
+          <input id="llm_model_override" name="llm_model_override" type="text" value="{{ g.llm_model_override }}" placeholder="{{ active_llm_model or 'geen actieve LLM-configuratie' }}">
+          <div class="hint">Leeg = het model van de actieve configuratie bij <a href="/keys">API-sleutels</a>{% if active_llm_model %} (<code>{{ active_llm_model }}</code>){% endif %}.</div></div>
+        <div class="field"><label for="max_active_per_user">Maximaal actieve projecten per gebruiker</label>
+          <input id="max_active_per_user" name="max_active_per_user" type="number" min="0" value="{{ g.max_active_per_user }}">
+          <div class="hint">0 = onbeperkt. De worker verwerkt altijd één job tegelijk.</div></div>
+      </div>
+      <div>
+        <div class="field"><label for="source_retention_days">Bronbestanden verwijderen na (dagen)</label>
+          <input id="source_retention_days" name="source_retention_days" type="number" min="0" value="{{ g.source_retention_days }}">
+          <div class="hint">Geldt voor afgeronde projecten. Clips blijven bewaard. 0 = nooit.</div></div>
+        <div class="field"><label for="project_retention_days">Hele projecten (incl. clips) verwijderen na (dagen)</label>
+          <input id="project_retention_days" name="project_retention_days" type="number" min="0" value="{{ g.project_retention_days }}">
+          <div class="hint">0 = nooit (aanbevolen, zodat downloads niet verdwijnen).</div></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" type="submit">Globale instellingen opslaan</button>
+  </form>
+</section>
+
+<section class="card">
+  <div class="row" style="justify-content:space-between;margin-bottom:.5rem">
+    <h2 style="margin:0">Schijfgebruik <span class="badge">{{ fmt_bytes(disk_total) }}</span></h2>
+    <form method="post" action="/settings/cleanup-now" class="inline" data-confirm="Retentie nu toepassen?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-sm" type="submit">Nu opruimen</button>
+    </form>
+  </div>
+  {% if disk %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Project</th><th>Eigenaar</th><th>Status</th><th class="num">Bron</th><th class="num">Clips</th></tr></thead>
+    <tbody>{% for d in disk %}
+      <tr><td><a href="/projects/{{ d.project.id }}">{{ (d.project.title or 'Project ' ~ d.project.id)|truncate(50) }}</a></td>
+      <td>{{ d.project.owner.username }}</td><td>{{ STATUS_LABELS.get(d.project.status, d.project.status) }}</td>
+      <td class="num">{{ fmt_bytes(d.input) if d.input else ('verwijderd' if d.project.source_deleted else '–') }}</td><td class="num">{{ fmt_bytes(d.output) }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">Nog geen projecten.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

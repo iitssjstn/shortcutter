@@ -1,0 +1,26 @@
+<div id="project-list" class="project-list"
+  {% if any_active %}hx-get="/partials/projects?scope={{ scope }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% for p in projects %}
+  <a class="project-item" href="/projects/{{ p.id }}">
+    <img class="project-thumb" src="/projects/{{ p.id }}/thumb" alt="" loading="lazy">
+    <div style="min-width:0">
+      <div class="project-title">{{ p.title or p.source_url or ('Project ' ~ p.id) }}</div>
+      <div class="project-meta">
+        {{ p.created_at|dt }} · {{ p.clips|length }} clip(s)
+        {% if scope == 'all' %} · {{ p.owner.username }}{% endif %}
+        {% if positions.get(p.id) %} · {{ positions[p.id] }}e in de wachtrij{% endif %}
+      </div>
+      {% if p.status in ACTIVE_STATUSES %}
+      <div class="progress" role="progressbar" aria-valuenow="{{ p.progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ p.progress }}%"></span></div>
+      {% endif %}
+    </div>
+    <div class="right">
+      {% if p.status == 'done' %}<span class="badge badge-ok">Klaar</span>{% if p.warnings %} <span class="badge badge-warn" title="Er zijn waarschuwingen">!</span>{% endif %}
+      {% elif p.status == 'failed' %}<span class="badge badge-error">Fout</span>
+      {% else %}<span class="badge badge-accent">{{ STATUS_LABELS.get(p.status, p.status) }}</span>{% endif %}
+    </div>
+  </a>
+  {% else %}
+  <div class="card empty">Nog geen projecten. Begin hierboven met een link of een bestand.</div>
+  {% endfor %}
+</div>

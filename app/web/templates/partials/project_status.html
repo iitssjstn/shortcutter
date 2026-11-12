@@ -1,0 +1,15 @@
+<div id="project-status" hx-get="/projects/{{ project.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML">
+  {% if project.status in ACTIVE_STATUSES %}
+  <div class="row" style="justify-content:space-between">
+    <strong>{{ STATUS_LABELS.get(project.status, project.status) }}</strong>
+    <span class="muted">{{ project.progress }}%</span>
+  </div>
+  <div class="progress" role="progressbar" aria-valuenow="{{ project.progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ project.progress }}%"></span></div>
+  <div class="muted" style="font-size:.85rem;margin-top:.3rem">
+    {{ project.stage_message }}
+    {% if position %} · {{ position }}e in de wachtrij{% elif position == 0 %} · wordt nu verwerkt{% endif %}
+  </div>
+  {% else %}
+  <div class="muted">Clips worden (opnieuw) gerenderd… {% if position %}({{ position }}e in de wachtrij){% endif %}</div>
+  {% endif %}
+</div>

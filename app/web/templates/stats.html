@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Statistieken{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Statistieken</h1>
+    <p class="muted">Schatting versus echte views van je geposte clips. Views zijn niet echt te voorspellen: zie de schatting als een ruwe indicatie.</p>
+  </div>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Nauwkeurigheid</h2>
+    {% if acc.n == 0 %}
+      <p class="muted">Nog geen gegevens. Markeer clips als gepost en vul na een paar dagen de echte views in.</p>
+    {% else %}
+      <div class="stats-row">
+        <div class="stat"><div class="k">Gem. afwijking</div><div class="v">factor {{ acc.gem_factor }}</div></div>
+        <div class="stat"><div class="k">Binnen bereik</div><div class="v">{{ acc.binnen_bereik_pct }}%</div></div>
+        <div class="stat"><div class="k">Mediaan afwijking</div><div class="v">{{ acc.mediaan_afwijking_pct }}%</div></div>
+        <div class="stat"><div class="k">Datapunten</div><div class="v">{{ acc.n }}</div></div>
+      </div>
+      <p class="muted" style="font-size:.85rem;margin-top:.6rem">
+        "Factor {{ acc.gem_factor }}" betekent dat de echte views gemiddeld {{ acc.gem_factor }}× hoger of lager uitkwamen dan het midden van de schatting.
+        {% if acc.vaker_meer_dan_geschat %}Je clips doen het vaker béter dan geschat.{% endif %}
+      </p>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Kalibratie</h2>
+    {% if cal.method == 'standaard' %}
+      <div class="flash flash-warn" style="margin-bottom:.5rem">Te weinig data: nog {{ min_median - cal.n }} geposte clip(s) met echte views nodig voor de eerste kalibratie.</div>
+      <p class="muted" style="font-size:.88rem">Tot die tijd: schatting = kanaalgemiddelde ({{ fmt_views(baseline) }}) × factor op basis van de viral score, getoond als 0,3× – 3×.</p>
+    {% elif cal.method == 'mediaan' %}
+      <p>Gekalibreerd met de <strong>mediaan</strong> van echt/geschat over {{ cal.n }} clips: correctiefactor <strong>{{ '%.2f'|format(cal.factor) }}</strong>.</p>
+      <p class="muted" style="font-size:.88rem">Vanaf {{ min_regression }} datapunten wordt een regressie op log(views) gebruikt (nog {{ min_regression - cal.n }} te gaan).</p>
+    {% else %}
+      <p>Gekalibreerd met <strong>lineaire regressie</strong> op log(views) over {{ cal.n }} clips.</p>
+      <p class="muted" style="font-size:.88rem">Elk punt viral score ≈ ×{{ '%.2f'|format(2.718281828 ** cal.b) }} views. Bereik: {{ '%.2f'|format(cal.low_factor) }}× – {{ '%.2f'|format(cal.high_factor) }}× (10e–90e percentiel).</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Geposte clips</h2>
+  {% if posted %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Clip</th><th>Platform</th><th class="num">Score</th><th class="num">Schatting (laag–hoog)</th><th class="num">Echt</th><th class="num">Echt / geschat</th></tr></thead>
+    <tbody>
+    {% for c in posted %}
+      <tr>
+        <td><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.title|truncate(50) }}</a></td>
+        <td>{% if c.posted_url %}<a href="{{ c.posted_url }}" target="_blank" rel="noopener noreferrer">{{ c.posted_platform }}</a>{% else %}{{ c.posted_platform }}{% endif %}</td>
+        <td class="num">{{ c.viral_score }}</td>
+        <td class="num">{{ fmt_views(c.est_low_at_post) }}–{{ fmt_views(c.est_high_at_post) }}</td>
+        <td class="num">{{ fmt_views(c.actual_views) if c.actual_views is not none else '–' }}</td>
+        <td class="num">{% if c.actual_views is not none and c.est_mid_at_post %}{{ '%.2f'|format(c.actual_views / c.est_mid_at_post) }}×{% else %}–{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">Nog geen geposte clips.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2 style="margin:1.25rem 0 .75rem">Wat presteert het best?</h2>
+  {% if with_views|length < 3 %}
+  <div class="card muted">Te weinig data: vul bij minstens 3 geposte clips de echte views in om patronen te zien.</div>
+  {% else %}
+  <div class="grid-2">
+    {% for name, rows in breakdown.items() %}
+    <div class="card">
+      <h3>{{ name }}</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Soort</th><th class="num">Clips</th><th class="num">Mediaan views</th><th class="num">Echt / geschat</th></tr></thead>
+        <tbody>{% for r in rows %}<tr><td>{{ r.key }}</td><td class="num">{{ r.n }}</td><td class="num">{{ fmt_views(r.median_views) }}</td><td class="num">{{ '%.2f×'|format(r.ratio) if r.ratio else '–' }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted" style="font-size:.85rem">Met weinig clips per groep zeggen deze cijfers nog weinig.</p>
+  {% endif %}
+</section>
+{% endblock %}

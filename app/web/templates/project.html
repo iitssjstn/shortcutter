@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title or 'Project' }}{% endblock %}
+{% block content %}
+<p><a href="/" class="muted">← Dashboard</a></p>
+<div class="page-head">
+  <div style="min-width:0">
+    <h1>{{ project.title or 'Project ' ~ project.id }}</h1>
+    <div class="row muted" style="font-size:.88rem">
+      {% if project.status == 'done' %}<span class="badge badge-ok">Klaar</span>
+      {% elif project.status == 'failed' %}<span class="badge badge-error">Fout</span>
+      {% else %}<span class="badge badge-accent">{{ STATUS_LABELS.get(project.status, project.status) }}</span>{% endif %}
+      <span>{{ project.created_at|dt }}</span>
+      {% if user.is_admin and project.owner_id != user.id %}<span>· eigenaar: {{ project.owner.username }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="row">
+    {% if project.status in ('failed', 'done') %}
+    <form method="post" action="/projects/{{ project.id }}/retry" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn" type="submit">{{ 'Opnieuw proberen' if project.status == 'failed' else 'Opnieuw verwerken' }}</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/projects/{{ project.id }}/delete" class="inline" data-confirm="Project en alle clips definitief verwijderen?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-danger" type="submit">Verwijderen</button>
+    </form>
+  </div>
+</div>
+
+<section class="card hero">
+  <img src="/projects/{{ project.id }}/thumb" alt="Thumbnail van de bron">
+  <div class="stack">
+    <div class="muted" style="font-size:.9rem">
+      {% if project.source_url %}Bron: <a href="{{ project.source_url }}" rel="noopener noreferrer" target="_blank">{{ project.source_url|truncate(60) }}</a>{% else %}Bron: geüpload bestand {{ project.source_filename or '' }}{% endif %}<br>
+      {% if project.duration %}Duur: {{ project.duration|ts }} · {% endif %}{% if project.width %}{{ project.width }}×{{ project.height }} · {% endif %}
+      {{ project.num_clips }} clips van {{ project.min_dur }}–{{ project.max_dur }} s<br>
+      {% if project.picker_used %}Fragmentkeuze: <strong>{{ 'LLM' if project.picker_used == 'llm' else 'heuristiek (spreekdichtheid)' }}</strong> · {% endif %}
+      Schijfgebruik: {{ fmt_bytes(disk.output) }} clips{% if disk.input %} + {{ fmt_bytes(disk.input) }} bron{% elif project.source_deleted %} · bron verwijderd (retentie){% endif %}
+    </div>
+    {% if busy %}{% include "partials/project_status.html" %}{% endif %}
+  </div>
+</section>
+
+{% for w in project.warnings %}
+<div class="flash flash-warn">{{ w }}</div>
+{% endfor %}
+
+{% if project.status == 'failed' %}
+<section class="card" style="border-color:var(--err)">
+  <h2 style="color:var(--err)">
+    {% if project.error_kind == 'download_blocked' %}Download geblokkeerd
+    {% elif project.error_kind == 'download_failed' %}Downloaden mislukt
+    {% elif project.error_kind == 'whisper' %}Transcriptie mislukt
+    {% elif project.error_kind == 'source_missing' %}Bronbestand ontbreekt
+    {% else %}Er ging iets mis{% endif %}
+  </h2>
+  <p>{{ project.error }}</p>
+  {% if project.error_kind in ('download_blocked', 'download_failed', 'source_missing') %}
+  <p class="muted">Upload het bronbestand zelf: het project gaat dan verder waar het was, zonder opnieuw te beginnen.</p>
+  {% include "partials/upload_source.html" %}
+  {% elif project.error_kind == 'whisper' %}
+  <p class="muted">Controleer het Whisper-model bij Instellingen (een kleiner model zoals <code>small</code> of <code>base</code> gebruikt minder geheugen) en probeer het opnieuw.</p>
+  {% endif %}
+  <form method="post" action="/projects/{{ project.id }}/retry" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn btn-primary" type="submit">Opnieuw proberen</button>
+  </form>
+</section>
+{% endif %}
+
+{% if clips %}
+<div class="toolbar">
+  <label class="row" style="margin:0;font-weight:500"><input type="checkbox" id="select-all"> Alles selecteren</label>
+  <span class="spacer"></span>
+  <a class="btn" id="download-selection" data-base="/projects/{{ project.id }}/zip-selection" href="/projects/{{ project.id }}/zip-selection" aria-disabled="true">Download selectie (<span id="selection-count">0</span>)</a>
+  <a class="btn btn-primary" href="/projects/{{ project.id }}/zip">Alles downloaden (zip)</a>
+</div>
+<p class="muted" style="font-size:.85rem;margin-top:-.4rem">
+  Views zijn een <strong>schatting</strong> (laag – hoog) t.o.v. het kanaalgemiddelde van {{ fmt_views(baseline) }}.
+  {% if calibration.method == 'standaard' %}Nog niet gekalibreerd: vul echte views in bij geposte clips.{% else %}Gekalibreerd met {{ calibration.n }} geposte clips ({{ calibration.method }}).{% endif %}
+</p>
+<div class="clip-grid">
+  {% for item in clips %}{% include "partials/clip_card.html" %}{% endfor %}
+</div>
+{% elif project.status == 'done' %}
+<div class="card empty">Er zijn geen clips. Voeg hieronder handmatig een clip toe.</div>
+{% endif %}
+
+{% if project.status not in ACTIVE_STATUSES %}
+<section class="card" style="margin-top:1rem" id="manual">
+  <details {% if not clips and project.status == 'done' %}open{% endif %}>
+    <summary>Clip handmatig toevoegen</summary>
+    <div class="details-body">
+      {% if has_source %}
+      <div class="grid-2">
+        <div>
+          <video id="source-player" src="/projects/{{ project.id }}/source" controls preload="metadata" style="width:100%;border-radius:8px;background:#000"></video>
+          <p class="hint">Klik in het transcript: eerste klik = start, tweede klik = einde. Of gebruik de knoppen bij de velden.</p>
+        </div>
+        <div>
+          {% if segments %}
+          <div class="transcript" aria-label="Transcript">
+            {% for s in segments %}<button type="button" data-seg-start="{{ s.start }}" data-seg-end="{{ s.end }}"><span class="t">{{ s.start|ts }}</span>{{ s.text }}</button>{% endfor %}
+          </div>
+          {% else %}<p class="muted">Nog geen transcript beschikbaar.</p>{% endif %}
+        </div>
+      </div>
+      <form method="post" action="/projects/{{ project.id }}/clips" style="margin-top:1rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="inline-fields">
+          <div class="field"><label for="manual-start">Start (s of m:ss)</label>
+            <input id="manual-start" name="start" type="text" required inputmode="decimal">
+            <button type="button" class="linklike" data-take-time="manual-start">huidige tijd</button></div>
+          <div class="field"><label for="manual-end">Einde</label>
+            <input id="manual-end" name="end" type="text" required inputmode="decimal">
+            <button type="button" class="linklike" data-take-time="manual-end">huidige tijd</button></div>
+          <div class="field"><label for="manual-title">Titel</label>
+            <input id="manual-title" name="title" type="text" maxlength="300"></div>
+        </div>
+        <button class="btn btn-primary" type="submit">Clip toevoegen en renderen</button>
+      </form>
+      {% else %}
+      <p class="muted">Het bronbestand is niet (meer) beschikbaar{% if project.source_deleted %} — het is na de retentieperiode verwijderd{% endif %}. Upload het opnieuw om handmatig clips te maken of opnieuw te renderen.</p>
+      {% include "partials/upload_source.html" %}
+      {% endif %}
+    </div>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,5 @@
+<form method="post" action="/projects/{{ project.id }}/upload-source" enctype="multipart/form-data" class="row" style="margin:.5rem 0 .75rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="file" name="file" required accept="video/*,.mp4,.mov,.mkv,.webm,.m4v">
+  <button class="btn" type="submit">Bronbestand uploaden</button>
+</form>
