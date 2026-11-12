@@ -76,5 +76,17 @@
     }
   });
 
+  // Snel invullen van een LLM-provider (alleen naam, base-URL en model; nooit een sleutel)
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-preset-base]");
+    if (!b) return;
+    var set = function (id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+    set("llm-name", b.getAttribute("data-preset-name"));
+    set("llm-base", b.getAttribute("data-preset-base"));
+    set("llm-model", b.getAttribute("data-preset-model"));
+    var k = document.getElementById("llm-key");
+    if (k) { k.placeholder = b.getAttribute("data-preset-prefix"); k.focus(); }
+  });
+
   document.addEventListener("DOMContentLoaded", updateSelection);
 })();

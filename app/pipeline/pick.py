@@ -199,6 +199,29 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def extra_headers(base_url: str) -> dict:
+    """OpenRouter vraagt optioneel om een app-naam; andere providers negeren dit."""
+    if "openrouter.ai" in (base_url or ""):
+        return {"X-Title": "Shortcutter"}
+    return {}
+
+
+def parse_json_content(content: str) -> dict:
+    """Parse het JSON-antwoord, ook als het model er ```json-fences of tekst omheen zet."""
+    text = (content or "").strip()
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+    if fence:
+        return json.loads(fence.group(1))
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        return json.loads(text[start : end + 1])
+    raise ValueError("geen JSON in het antwoord")
+
+
 def chat_json(
     cfg: LLMConfig,
     messages: list[dict],
@@ -216,7 +239,7 @@ def chat_json(
         "response_format": {"type": "json_object"},
         "temperature": 0.4,
     }
-    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json", **extra_headers(cfg.base_url)}
     own = client is None
     client = client or httpx.Client(timeout=timeout)
     last = "onbekende fout"
@@ -230,6 +253,8 @@ def chat_json(
                 continue
             if r.status_code in (401, 403):
                 raise LLMError("De LLM-API weigert de sleutel (ongeldig of geen toegang).", "invalid")
+            if r.status_code == 402:
+                raise LLMError("Onvoldoende tegoed bij de LLM-provider.", "no_credit")
             if r.status_code == 429 or r.status_code >= 500:
                 last = "rate limit (429)" if r.status_code == 429 else f"serverfout ({r.status_code})"
                 wait = 2 ** (attempt + 1)
@@ -243,7 +268,7 @@ def chat_json(
                 raise LLMError(f"De LLM-API gaf fout {r.status_code}.", "error")
             try:
                 content = r.json()["choices"][0]["message"]["content"]
-                return json.loads(content)
+                return parse_json_content(content)
             except (ValueError, KeyError, IndexError, TypeError):
                 last = "onleesbaar antwoord"
                 continue

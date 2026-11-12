@@ -26,6 +26,11 @@ DEFAULT_LLM_BASE = "https://api.groq.com/openai/v1"
 DEFAULT_LLM_MODEL = "llama-3.3-70b-versatile"
 YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
 MAX_COOKIES_BYTES = 1024 * 1024
+LLM_PRESETS = [
+    {"label": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "model": "meta-llama/llama-3.3-70b-instruct", "prefix": "sk-or-…"},
+    {"label": "Groq", "base_url": DEFAULT_LLM_BASE, "model": DEFAULT_LLM_MODEL, "prefix": "gsk_…"},
+    {"label": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "prefix": "sk-…"},
+]
 PROVIDER_LABELS = {"llm": "LLM (OpenAI-compatibel)", "youtube": "YouTube Data API", "cookies": "yt-dlp cookies.txt"}
 
 
@@ -85,6 +90,7 @@ def keys_page(request: Request, user: User = Depends(require_admin), db: Session
             "logs": logs,
             "default_base": DEFAULT_LLM_BASE,
             "default_model": DEFAULT_LLM_MODEL,
+            "presets": LLM_PRESETS,
             "key_source": crypto.key_source(),
         },
     )
@@ -239,8 +245,41 @@ def upload_cookies(file: UploadFile = File(...), user: User = Depends(require_ad
 
 
 # ---------------------------------------------------------------- testen
+def _test_openrouter(cred: Credential, key: str, client: httpx.Client) -> tuple[str, str]:
+    """OpenRouter geeft /models ook zonder geldige sleutel; /key controleert hem echt."""
+    base = cred.base_url.rstrip("/")
+    try:
+        r = client.get(f"{base}/key", headers={"Authorization": f"Bearer {key}"})
+    except httpx.HTTPError as exc:
+        return "onbereikbaar", f"OpenRouter is niet bereikbaar ({type(exc).__name__})."
+    if r.status_code in (401, 403):
+        return "ongeldig", "Sleutel ongeldig of ingetrokken."
+    if r.status_code == 429:
+        return "rate_limit", "Rate limit bereikt: de sleutel is waarschijnlijk geldig, probeer het later opnieuw."
+    if r.status_code != 200:
+        return "fout", f"Onverwacht antwoord van OpenRouter (HTTP {r.status_code})."
+    try:
+        data = r.json().get("data", {}) or {}
+    except ValueError:
+        data = {}
+    limit_remaining = data.get("limit_remaining")
+    if isinstance(limit_remaining, (int, float)) and limit_remaining <= 0:
+        return "ongeldig", "Sleutel is geldig, maar het tegoed of de limiet is op."
+    msg = "Sleutel werkt."
+    try:
+        m = client.get(f"{base}/models")
+        ids = {x.get("id") for x in m.json().get("data", [])} if m.status_code == 200 else set()
+    except (httpx.HTTPError, ValueError, AttributeError):
+        ids = set()
+    if ids and cred.model not in ids:
+        msg += f" Let op: model '{cred.model}' bestaat niet bij OpenRouter (gebruik bijv. 'meta-llama/llama-3.3-70b-instruct')."
+    return "geldig", msg
+
+
 def test_llm(cred: Credential, client: httpx.Client) -> tuple[str, str]:
     key = crypto.decrypt_str(cred.encrypted_value)
+    if "openrouter.ai" in (cred.base_url or ""):
+        return _test_openrouter(cred, key, client)
     try:
         r = client.get(f"{cred.base_url.rstrip('/')}/models", headers={"Authorization": f"Bearer {key}"})
     except httpx.HTTPError as exc:

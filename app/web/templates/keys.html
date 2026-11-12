@@ -11,7 +11,7 @@
 
 <section class="card">
   <h2>LLM <span class="badge badge-accent">aanbevolen</span></h2>
-  <p class="muted" style="font-size:.9rem">Voor de clipkeuze. Elke OpenAI-compatibele API werkt (standaard Groq). Je kunt meerdere configuraties opslaan; één is actief.</p>
+  <p class="muted" style="font-size:.9rem">Voor de clipkeuze. Elke OpenAI-compatibele API werkt, zoals OpenRouter (<code>https://openrouter.ai/api/v1</code>), Groq of OpenAI. Je kunt meerdere configuraties opslaan; één is actief.</p>
   {% if not llm %}<div class="flash flash-warn">Geen LLM-sleutel: de app valt terug op een heuristiek (spreekdichtheid).</div>{% endif %}
   {% for c in llm %}
   <div class="card" style="background:var(--surface-2);box-shadow:none">
@@ -65,6 +65,10 @@
     <summary>LLM-configuratie toevoegen</summary>
     <form method="post" action="/keys/llm" class="details-body" autocomplete="off">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="row" style="margin-bottom:.75rem">
+        <span class="muted" style="font-size:.85rem">Snel invullen:</span>
+        {% for p in presets %}<button type="button" class="btn btn-sm" data-preset-name="{{ p.label }}" data-preset-base="{{ p.base_url }}" data-preset-model="{{ p.model }}" data-preset-prefix="{{ p.prefix }}">{{ p.label }}</button>{% endfor %}
+      </div>
       <div class="grid-2">
         <div class="field"><label for="llm-name">Naam</label><input id="llm-name" name="name" type="text" value="Groq" required></div>
         <div class="field"><label for="llm-base">Base-URL</label><input id="llm-base" name="base_url" type="url" value="{{ default_base }}" required></div>

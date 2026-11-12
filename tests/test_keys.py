@@ -151,3 +151,33 @@ def test_cookies_upload(admin_client):
     cred = db.scalar(select(Credential).where(Credential.provider == "cookies"))
     assert b"geheimecookiewaarde" not in cred.encrypted_value
     db.close()
+
+
+def test_openrouter_key_test_checks_key_endpoint(admin_client, monkeypatch):
+    """OpenRouter geeft /models ook zonder geldige sleutel; de test moet /key gebruiken."""
+    secret = "sk-or-v1-0123456789abcdef0123456789abcdefXy12"
+    admin_client.post("/keys/llm", data={"name": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
+                                         "model": "meta-llama/llama-3.3-70b-instruct", "api_key": secret, "make_active": "1"})
+    db = new_session()
+    kid = db.scalar(select(Credential.id))
+    db.close()
+    paths = []
+
+    def make(key_status, remaining=10.0):
+        def h(request: httpx.Request):
+            paths.append(request.url.path)
+            if request.url.path.endswith("/key"):
+                if key_status != 200:
+                    return httpx.Response(key_status, json={"error": {"message": "No auth credentials found"}})
+                return httpx.Response(200, json={"data": {"label": "x", "limit_remaining": remaining}})
+            return httpx.Response(200, json={"data": [{"id": "meta-llama/llama-3.3-70b-instruct"}]})
+        return h
+
+    for status, remaining, expect in [(200, 10.0, "Sleutel werkt"), (401, 0, "ongeldig"), (200, 0, "tegoed")]:
+        monkeypatch.setattr(keys_api, "_test_client_factory",
+                            lambda s=status, r=remaining: httpx.Client(transport=httpx.MockTransport(make(s, r))))
+        r = admin_client.post(f"/keys/{kid}/test", headers={"HX-Request": "true"})
+        assert expect.lower() in r.text.lower(), r.text
+        assert secret not in r.text
+    assert "/api/v1/key" in paths
+    assert "sk-…Xy12" in admin_client.get("/keys").text

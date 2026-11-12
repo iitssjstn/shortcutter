@@ -131,3 +131,26 @@ def test_pick_clips_falls_back_to_heuristic():
     assert method == "heuristiek" and clips and "heuristiek" in warning
     clips, method, warning = pick_clips(t, 2, 15, 30, None)
     assert method == "heuristiek" and "Geen LLM-sleutel" in warning
+
+
+def test_parse_json_with_fences_and_text():
+    assert pick.parse_json_content('```json\n{"clips": []}\n```') == {"clips": []}
+    assert pick.parse_json_content('Hier is het:\n{"clips": [1]}\nSucces!') == {"clips": [1]}
+    with pytest.raises(ValueError):
+        pick.parse_json_content("geen json")
+
+
+def test_openrouter_request_and_402():
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["title"] = request.headers.get("x-title")
+        return httpx.Response(402, json={"error": {"message": "Insufficient credits"}})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    cfg = LLMConfig("https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct", "sk-or-v1-geheim")
+    with pytest.raises(LLMError) as exc:
+        pick.chat_json(cfg, [], client=client, sleep=lambda s: None)
+    assert exc.value.kind == "no_credit" and "sk-or-v1-geheim" not in str(exc.value)
+    assert seen["url"] == "https://openrouter.ai/api/v1/chat/completions" and seen["title"] == "Shortcutter"
