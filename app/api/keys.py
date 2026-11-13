@@ -271,7 +271,7 @@ def _test_openrouter(cred: Credential, key: str, client: httpx.Client) -> tuple[
         ids = {x.get("id") for x in m.json().get("data", [])} if m.status_code == 200 else set()
     except (httpx.HTTPError, ValueError, AttributeError):
         ids = set()
-    if ids and cred.model not in ids:
+    if ids and cred.model not in ids and not cred.model.startswith("openrouter/"):
         msg += f" Let op: model '{cred.model}' bestaat niet bij OpenRouter (gebruik bijv. 'meta-llama/llama-3.3-70b-instruct')."
     return "geldig", msg
 

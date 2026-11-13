@@ -105,3 +105,57 @@ def test_settings_post_language(admin_client):
                                              "post_language": "nl"})
     assert r.status_code == 303
     assert 'value="nl" selected' in admin_client.get("/settings").text
+
+
+def test_model_per_task(admin_client):
+    from app.core.db import new_session
+    from app.core.keys import load_llm_config
+
+    admin_client.post("/keys/llm", data={"name": "OR", "base_url": "https://openrouter.ai/api/v1", "model": "openai/gpt-4o-mini",
+                                         "api_key": "sk-or-v1-test000000000", "make_active": "1"})
+    db = new_session()
+    assert load_llm_config(db, "pick").models == ["openai/gpt-4o-mini"]
+    db.close()
+    r = admin_client.post("/settings/global", data={
+        "whisper_model": "", "llm_model_pick": "google/gemini-2.5-flash,  openai/gpt-4o-mini ",
+        "llm_model_copy": "openrouter/auto", "max_active_per_user": "0", "source_retention_days": "7",
+        "project_retention_days": "0"})
+    assert r.status_code == 303
+    db = new_session()
+    pick_cfg, copy_cfg = load_llm_config(db, "pick"), load_llm_config(db, "copy")
+    assert pick_cfg.models == ["google/gemini-2.5-flash", "openai/gpt-4o-mini"]
+    assert copy_cfg.models == ["openrouter/auto"]
+    db.close()
+    page = admin_client.get("/settings").text
+    assert 'value="google/gemini-2.5-flash, openai/gpt-4o-mini"' in page and 'value="openrouter/auto"' in page
+
+
+def test_project_shows_model_used(project_factory, settings, sample_video, monkeypatch, admin_client):
+    from app.core.db import new_session
+    from app.core.models import Project
+    from app.pipeline import run as run_mod
+    from app.worker.runner import run_job_once
+    from tests.test_pipeline_run import _fake_transcribe, _put_source
+
+    admin_client.post("/keys/llm", data={"name": "OR", "base_url": "https://openrouter.ai/api/v1", "model": "openrouter/auto",
+                                         "api_key": "sk-or-v1-test000000000", "make_active": "1"})
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+
+    def fake_chat(cfg, messages, **kw):
+        if kw.get("meta") is not None:
+            kw["meta"]["model"] = "anthropic/door-auto-gekozen"
+        return {"clips": [{"start": 0.0, "end": 4.0, "title": "T", "hook_sterkte": 7, "emotie_of_verrassing": 7,
+                           "begrijpelijkheid_zonder_context": 7, "afronding": 7}]}
+
+    monkeypatch.setattr(pick, "chat_json", fake_chat)
+    pid = project_factory()
+    _put_source(settings, pid, sample_video)
+    run_job_once()
+    db = new_session()
+    p = db.get(Project, pid)
+    assert p.picker_used == "llm" and p.llm_model == "anthropic/door-auto-gekozen"
+    db.close()
+    assert "LLM (anthropic/door-auto-gekozen)" in admin_client.get(f"/projects/{pid}").text
+
+
+from tests.test_pipeline_run import project_factory  # noqa: E402,F401  (fixture hergebruiken)

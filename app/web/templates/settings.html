@@ -63,9 +63,17 @@
             {% for m in whisper_models %}<option value="{{ m }}" {% if g.whisper_model == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
           </select>
           <div class="hint">Nu actief: <code>{{ effective_whisper }}</code> op {{ whisper_device }}/{{ whisper_compute }}. Grotere modellen zijn nauwkeuriger maar trager en gebruiken meer geheugen.</div></div>
-        <div class="field"><label for="llm_model_override">LLM-model</label>
-          <input id="llm_model_override" name="llm_model_override" type="text" value="{{ g.llm_model_override }}" placeholder="{{ active_llm_model or 'geen actieve LLM-configuratie' }}">
-          <div class="hint">Leeg = het model van de actieve configuratie bij <a href="/keys">API-sleutels</a>{% if active_llm_model %} (<code>{{ active_llm_model }}</code>){% endif %}.</div></div>
+        <div class="field"><label for="llm_model_pick">LLM-model voor de clipkeuze</label>
+          <input id="llm_model_pick" name="llm_model_pick" type="text" value="{{ g.llm_model_pick or g.llm_model_override }}" placeholder="{{ active_llm_model or 'geen actieve LLM-configuratie' }}">
+          <div class="hint">Leest lange transcripten en scoort fragmenten: kies hier een sterk model met een groot contextvenster.</div></div>
+        <div class="field"><label for="llm_model_copy">LLM-model voor titels en beschrijvingen</label>
+          <input id="llm_model_copy" name="llm_model_copy" type="text" value="{{ g.llm_model_copy }}" placeholder="{{ active_llm_model or 'geen actieve LLM-configuratie' }}">
+          <div class="hint">Korte teksten schrijven: een snel en goedkoop model is genoeg.</div></div>
+        <p class="hint" style="margin-top:-.4rem">
+          Leeg = het model van de actieve configuratie bij <a href="/keys">API-sleutels</a>{% if active_llm_model %} (<code>{{ active_llm_model }}</code>){% endif %}.
+          Meerdere modellen gescheiden door komma's = terugval: faalt het eerste (fout, overbelast), dan wordt het volgende geprobeerd,
+          bijv. <code>google/gemini-2.5-flash, openai/gpt-4o-mini</code>. Bij OpenRouter kan ook <code>openrouter/auto</code>.
+        </p>
         <div class="field"><label for="max_active_per_user">Maximaal actieve projecten per gebruiker</label>
           <input id="max_active_per_user" name="max_active_per_user" type="number" min="0" value="{{ g.max_active_per_user }}">
           <div class="hint">0 = onbeperkt. De worker verwerkt altijd één job tegelijk.</div></div>

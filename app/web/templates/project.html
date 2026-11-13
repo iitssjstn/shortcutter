@@ -34,7 +34,7 @@
       {% if project.source_url %}Bron: <a href="{{ project.source_url }}" rel="noopener noreferrer" target="_blank">{{ project.source_url|truncate(60) }}</a>{% else %}Bron: geüpload bestand {{ project.source_filename or '' }}{% endif %}<br>
       {% if project.duration %}Duur: {{ project.duration|ts }} · {% endif %}{% if project.width %}{{ project.width }}×{{ project.height }} · {% endif %}
       {{ project.num_clips }} clips van {{ project.min_dur }}–{{ project.max_dur }} s<br>
-      {% if project.picker_used %}Fragmentkeuze: <strong>{{ 'LLM' if project.picker_used == 'llm' else 'heuristiek (spreekdichtheid)' }}</strong> · {% endif %}
+      {% if project.picker_used %}Fragmentkeuze: <strong>{{ ('LLM' ~ (' (' ~ project.llm_model ~ ')' if project.llm_model else '')) if project.picker_used == 'llm' else 'heuristiek (spreekdichtheid)' }}</strong> · {% endif %}
       Schijfgebruik: {{ fmt_bytes(disk.output) }} clips{% if disk.input %} + {{ fmt_bytes(disk.input) }} bron{% elif project.source_deleted %} · bron verwijderd (retentie){% endif %}
     </div>
     {% if busy %}{% include "partials/project_status.html" %}{% endif %}

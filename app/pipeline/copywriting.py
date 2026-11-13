@@ -72,6 +72,7 @@ def generate_post_texts(
     client: httpx.Client | None = None,
     sleep: Callable[[float], None] | None = None,
     language: str = "en",
+    meta: dict | None = None,
 ) -> dict[int, dict]:
     """items: [{'id', 'text', 'title'}]. Geeft {id: {'title','description','hashtags'}} terug."""
     from app.pipeline import pick
@@ -88,7 +89,7 @@ def generate_post_texts(
             + blocks
         )},
     ]
-    kw = {"client": client}
+    kw = {"client": client, "meta": meta}
     if sleep is not None:
         kw["sleep"] = sleep
     data = pick.chat_json(cfg, messages, **kw)

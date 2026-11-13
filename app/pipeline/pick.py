@@ -40,6 +40,11 @@ class LLMConfig:
     base_url: str
     model: str
     api_key: str
+    fallbacks: tuple[str, ...] = ()  # volgende modellen als het eerste faalt
+
+    @property
+    def models(self) -> list[str]:
+        return [self.model, *[m for m in self.fallbacks if m and m != self.model]]
 
 
 # ---------------------------------------------------------------- zinsgrenzen
@@ -224,6 +229,49 @@ def parse_json_content(content: str) -> dict:
     raise ValueError("geen JSON in het antwoord")
 
 
+def _chat_once(cfg: LLMConfig, model: str, messages, client, retries, sleep) -> tuple[dict, str]:
+    url = cfg.base_url.rstrip("/") + "/chat/completions"
+    payload = {
+        "model": model,
+        "messages": messages,
+        "response_format": {"type": "json_object"},
+        "temperature": 0.4,
+    }
+    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json", **extra_headers(cfg.base_url)}
+    last = "onbekende fout"
+    for attempt in range(retries):
+        try:
+            r = client.post(url, json=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            last = f"verbindingsfout ({type(exc).__name__})"
+            sleep(min(30, 2 ** (attempt + 1)))
+            continue
+        if r.status_code in (401, 403):
+            raise LLMError("De LLM-API weigert de sleutel (ongeldig of geen toegang).", "invalid")
+        if r.status_code == 402:
+            raise LLMError("Onvoldoende tegoed bij de LLM-provider.", "no_credit")
+        if r.status_code == 429 or r.status_code >= 500:
+            last = "rate limit (429)" if r.status_code == 429 else f"serverfout ({r.status_code})"
+            wait = 2 ** (attempt + 1)
+            try:
+                wait = max(wait, float(r.headers.get("retry-after", 0)))
+            except ValueError:
+                pass
+            sleep(min(30, wait))
+            continue
+        if r.status_code >= 400:
+            raise LLMError(f"Model '{model}' gaf fout {r.status_code} (bestaat het model wel?).", "model")
+        try:
+            body = r.json()
+            content = body["choices"][0]["message"]["content"]
+            return parse_json_content(content), str(body.get("model") or model)
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+            last = "onleesbaar antwoord"
+            continue
+    raise LLMError(f"Model '{model}' niet bereikbaar na {retries} pogingen: {last}.",
+                   "rate_limit" if "429" in last else "error")
+
+
 def chat_json(
     cfg: LLMConfig,
     messages: list[dict],
@@ -232,53 +280,36 @@ def chat_json(
     retries: int = 4,
     sleep: Callable[[float], None] = _sleep,
     timeout: float = 120.0,
+    meta: dict | None = None,
 ) -> dict:
-    """Chat-completion met response_format=json_object en retries bij 429/5xx."""
-    url = cfg.base_url.rstrip("/") + "/chat/completions"
-    payload = {
-        "model": cfg.model,
-        "messages": messages,
-        "response_format": {"type": "json_object"},
-        "temperature": 0.4,
-    }
-    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json", **extra_headers(cfg.base_url)}
+    """Chat-completion met response_format=json_object, retries bij 429/5xx en terugvalmodellen.
+
+    Faalt een model (fout, overbelast, onleesbaar antwoord), dan wordt het volgende model uit
+    cfg.fallbacks geprobeerd. Een ongeldige sleutel of geen tegoed stopt meteen.
+    `meta['model']` krijgt het model dat echt antwoordde (zoals de provider het teruggeeft).
+    """
     own = client is None
     client = client or httpx.Client(timeout=timeout)
-    last = "onbekende fout"
+    last_exc: LLMError | None = None
     try:
-        for attempt in range(retries):
+        for model in cfg.models:
             try:
-                r = client.post(url, json=payload, headers=headers)
-            except httpx.HTTPError as exc:
-                last = f"verbindingsfout ({type(exc).__name__})"
-                sleep(min(30, 2 ** (attempt + 1)))
+                data, used = _chat_once(cfg, model, messages, client, retries, sleep)
+            except LLMError as exc:
+                if exc.kind in ("invalid", "no_credit"):
+                    raise
+                log.warning("LLM-model %s faalde (%s); volgende model proberen", model, exc.kind)
+                last_exc = exc
                 continue
-            if r.status_code in (401, 403):
-                raise LLMError("De LLM-API weigert de sleutel (ongeldig of geen toegang).", "invalid")
-            if r.status_code == 402:
-                raise LLMError("Onvoldoende tegoed bij de LLM-provider.", "no_credit")
-            if r.status_code == 429 or r.status_code >= 500:
-                last = "rate limit (429)" if r.status_code == 429 else f"serverfout ({r.status_code})"
-                wait = 2 ** (attempt + 1)
-                try:
-                    wait = max(wait, float(r.headers.get("retry-after", 0)))
-                except ValueError:
-                    pass
-                sleep(min(30, wait))
-                continue
-            if r.status_code >= 400:
-                raise LLMError(f"De LLM-API gaf fout {r.status_code}.", "error")
-            try:
-                content = r.json()["choices"][0]["message"]["content"]
-                return parse_json_content(content)
-            except (ValueError, KeyError, IndexError, TypeError):
-                last = "onleesbaar antwoord"
-                continue
+            if meta is not None:
+                meta["model"] = used
+            return data
     finally:
         if own:
             client.close()
-    raise LLMError(f"LLM-API niet bereikbaar na {retries} pogingen: {last}.",
-                   "rate_limit" if "429" in last else "error")
+    if last_exc and len(cfg.models) > 1:
+        raise LLMError(f"Alle modellen faalden ({', '.join(cfg.models)}). Laatste fout: {last_exc}", last_exc.kind)
+    raise last_exc or LLMError("Geen model ingesteld.", "error")
 
 
 def _chunks(transcript: dict) -> list[str]:
@@ -338,6 +369,7 @@ def llm_pick(
     client: httpx.Client | None = None,
     sleep: Callable[[float], None] = _sleep,
     post_language: str = "en",
+    meta: dict | None = None,
 ) -> list[dict]:
     from app.pipeline.copywriting import clean_description, clean_title, normalize_hashtags
 
@@ -358,6 +390,7 @@ def llm_pick(
             ],
             client=client,
             sleep=sleep,
+            meta=meta,
         )
         items = data.get("clips") if isinstance(data, dict) else None
         if not isinstance(items, list):

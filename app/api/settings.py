@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.common import redirect, render
 from app.core.auth import require_admin, require_user
 from app.core.db import get_db
-from app.core.keys import active_llm, youtube_key
+from app.core.keys import active_llm, parse_models, youtube_key
 from app.core.models import Credential, Project, User
 from app.core.paths import dir_size, project_input, project_output
 from app.core.store import (
@@ -114,7 +114,8 @@ def fetch_channel_avg(channel: str = Form(...), user: User = Depends(require_use
 @router.post("/settings/global")
 def save_global(
     whisper_model: str = Form(""),
-    llm_model_override: str = Form(""),
+    llm_model_pick: str = Form(""),
+    llm_model_copy: str = Form(""),
     max_active_per_user: int = Form(0),
     source_retention_days: int = Form(7),
     project_retention_days: int = Form(0),
@@ -124,7 +125,9 @@ def save_global(
     if whisper_model and whisper_model not in WHISPER_MODELS:
         return redirect("/settings", "Onbekend Whisper-model.", "error")
     set_global(db, "whisper_model", whisper_model)
-    set_global(db, "llm_model_override", llm_model_override.strip()[:120])
+    set_global(db, "llm_model_pick", ", ".join(parse_models(llm_model_pick))[:400])
+    set_global(db, "llm_model_copy", ", ".join(parse_models(llm_model_copy))[:400])
+    set_global(db, "llm_model_override", "")
     set_global(db, "max_active_per_user", str(_clamp(max_active_per_user, 0, 1000)))
     set_global(db, "source_retention_days", str(_clamp(source_retention_days, 0, 3650)))
     set_global(db, "project_retention_days", str(_clamp(project_retention_days, 0, 3650)))

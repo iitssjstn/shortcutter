@@ -167,6 +167,7 @@ class Project(Base, JsonMixin):
     error_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
     warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     picker_used: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(120), nullable=True)  # model dat echt antwoordde
     num_clips: Mapped[int] = mapped_column(Integer, default=5)
     min_dur: Mapped[int] = mapped_column(Integer, default=20)
     max_dur: Mapped[int] = mapped_column(Integer, default=55)

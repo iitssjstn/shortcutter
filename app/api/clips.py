@@ -191,7 +191,7 @@ def retitle(
 
 def _generate(db: Session, clips: list[Clip]) -> tuple[int, str | None]:
     """Laat de LLM posttekst schrijven. Geeft (aantal bijgewerkt, foutmelding) terug."""
-    cfg = load_llm_config(db)
+    cfg = load_llm_config(db, "copy")
     if cfg is None:
         return 0, "Er is geen LLM-sleutel ingesteld (zie API-sleutels)."
     if not clips:

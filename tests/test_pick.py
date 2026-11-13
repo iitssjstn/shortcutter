@@ -154,3 +154,48 @@ def test_openrouter_request_and_402():
         pick.chat_json(cfg, [], client=client, sleep=lambda s: None)
     assert exc.value.kind == "no_credit" and "sk-or-v1-geheim" not in str(exc.value)
     assert seen["url"] == "https://openrouter.ai/api/v1/chat/completions" and seen["title"] == "Shortcutter"
+
+
+def _ok(model_used, clips=None):
+    return httpx.Response(200, json={"model": model_used, "choices": [{"message": {"content": json.dumps({"clips": clips or []})}}]})
+
+
+def test_fallback_to_next_model_and_meta():
+    tried = []
+
+    def handler(request):
+        model = json.loads(request.content)["model"]
+        tried.append(model)
+        if model == "kapot/model":
+            return httpx.Response(404, json={"error": {"message": "No endpoints found"}})
+        if model == "druk/model":
+            return httpx.Response(503)
+        return _ok("echt/gebruikt-model")
+
+    cfg = LLMConfig("https://x/v1", "kapot/model", "k", fallbacks=("druk/model", "goed/model"))
+    meta = {}
+    out = pick.chat_json(cfg, [], client=httpx.Client(transport=httpx.MockTransport(handler)), sleep=lambda s: None, meta=meta)
+    assert out == {"clips": []}
+    assert tried == ["kapot/model", "druk/model", "druk/model", "druk/model", "druk/model", "goed/model"]
+    assert meta["model"] == "echt/gebruikt-model"
+
+
+def test_invalid_key_does_not_try_fallbacks():
+    tried = []
+
+    def handler(request):
+        tried.append(json.loads(request.content)["model"])
+        return httpx.Response(401)
+
+    cfg = LLMConfig("https://x/v1", "a", "k", fallbacks=("b",))
+    with pytest.raises(LLMError) as exc:
+        pick.chat_json(cfg, [], client=httpx.Client(transport=httpx.MockTransport(handler)), sleep=lambda s: None)
+    assert exc.value.kind == "invalid" and tried == ["a"]
+
+
+def test_all_models_fail_message():
+    cfg = LLMConfig("https://x/v1", "a", "k", fallbacks=("b",))
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404)))
+    with pytest.raises(LLMError) as exc:
+        pick.chat_json(cfg, [], client=client, sleep=lambda s: None)
+    assert "Alle modellen faalden (a, b)" in str(exc.value)

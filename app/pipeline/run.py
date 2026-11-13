@@ -208,14 +208,16 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
         # 3. fragmentkeuze (alleen als er nog geen clips zijn, bv. bij opnieuw proberen)
         if not project.clips:
             _set(db, project, "picking", 58, "Fragmenten kiezen…")
-            cfg = load_llm_config(db)
+            cfg = load_llm_config(db, "pick")
+            meta: dict = {}
             from app.core.store import user_settings
 
             lang = user_settings(db, project.owner_id).post_language or "en"
             picked, method, warning = pick_clips(
                 transcript, project.num_clips, project.min_dur, project.max_dur, cfg,
-                post_language=lang, **pick_kwargs,
+                post_language=lang, meta=meta, **pick_kwargs,
             )
+            project.llm_model = meta.get("model") if method == "llm" else None
             project.picker_used = method
             if warning:
                 project.add_warning(warning)

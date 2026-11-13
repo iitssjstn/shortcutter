@@ -21,7 +21,12 @@ def active_llm(db: Session) -> Credential | None:
     )
 
 
-def load_llm_config(db: Session) -> LLMConfig | None:
+def parse_models(text: str | None) -> list[str]:
+    return [m.strip() for m in (text or "").replace("\n", ",").split(",") if m.strip()][:5]
+
+
+def load_llm_config(db: Session, task: str = "pick") -> LLMConfig | None:
+    """task: 'pick' (clipkeuze) of 'copy' (posttekst). Elke taak kan eigen modellen hebben."""
     cred = active_llm(db)
     if cred is None:
         return None
@@ -31,8 +36,14 @@ def load_llm_config(db: Session) -> LLMConfig | None:
         return None
     cred.last_used_at = utcnow()
     db.commit()
-    model = get_global(db, "llm_model_override") or cred.model or "llama-3.3-70b-versatile"
-    return LLMConfig(base_url=cred.base_url or "https://api.groq.com/openai/v1", model=model, api_key=key)
+    models = (
+        parse_models(get_global(db, f"llm_model_{task}"))
+        or parse_models(get_global(db, "llm_model_override"))  # oude instelling
+        or parse_models(cred.model)
+        or ["llama-3.3-70b-versatile"]
+    )
+    return LLMConfig(base_url=cred.base_url or "https://api.groq.com/openai/v1", model=models[0], api_key=key,
+                     fallbacks=tuple(models[1:]))
 
 
 def youtube_key(db: Session) -> str | None:

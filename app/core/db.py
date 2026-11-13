@@ -55,6 +55,7 @@ _ADDED_COLUMNS = [
     ("clips", "description", "TEXT NOT NULL DEFAULT ''"),
     ("user_settings", "post_language", "VARCHAR(8) NOT NULL DEFAULT 'en'"),
     ("projects", "facecam_box", "VARCHAR(64)"),
+    ("projects", "llm_model", "VARCHAR(120)"),
     ("clips", "hashtags", "VARCHAR(300) NOT NULL DEFAULT ''"),
 ]
 

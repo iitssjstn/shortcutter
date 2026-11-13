@@ -10,7 +10,9 @@ from app.core.models import AuditLog, Clip, GlobalSetting, Project, User, UserSe
 
 GLOBAL_DEFAULTS: dict[str, str] = {
     "whisper_model": "",  # leeg = WHISPER_MODEL uit de omgeving
-    "llm_model_override": "",
+    "llm_model_override": "",  # verouderd; vervangen door llm_model_pick/llm_model_copy
+    "llm_model_pick": "",  # leeg = model van de actieve configuratie
+    "llm_model_copy": "",
     "max_active_per_user": "0",  # 0 = onbeperkt
     "source_retention_days": "7",  # 0 = nooit verwijderen
     "project_retention_days": "0",  # 0 = clips altijd bewaren

@@ -138,6 +138,9 @@ bestaande sleutels niet meer ontsleuteld worden en moet je ze opnieuw invullen.
   (zonder AVX, float32, zonder spraakdetectie). Dat is trager maar werkt op elke x86-CPU. Raakt het
   geheugen vol, dan krijg je daarvan een melding: kies dan een kleiner model (`base` of `tiny`).
   Een taak die de server twee keer laat herstarten, wordt als mislukt gemarkeerd in plaats van eindeloos opnieuw te starten.
+- **Model per taak** (Instellingen, admin): een apart LLM-model voor de clipkeuze (sterk model, lange transcripten)
+  en voor titels/beschrijvingen (snel en goedkoop). Met komma's geef je terugvalmodellen op: faalt het eerste,
+  dan probeert de app het volgende. Op de projectpagina zie je welk model echt antwoordde.
 - **Posttekst**: de LLM schrijft per clip een titel, beschrijving en hashtags om te kopiëren (standaard in het
   Engels voor meer bereik; te wijzigen bij Instellingen). Voor bestaande clips: "Posttekst voor alle clips".
 - **Beeld niet gevuld (16:9 klein in 9:16)**: kies bij Beeldvulling "Vullen" (per project, als standaard bij
