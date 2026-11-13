@@ -21,6 +21,15 @@ def active_llm(db: Session) -> Credential | None:
     )
 
 
+def default_model(base_url: str | None) -> str:
+    """Als nergens een model is ingevuld: bij OpenRouter laat je OpenRouter kiezen."""
+    if "openrouter.ai" in (base_url or ""):
+        return "openrouter/auto"
+    if "api.openai.com" in (base_url or ""):
+        return "gpt-4o-mini"
+    return "llama-3.3-70b-versatile"
+
+
 def parse_models(text: str | None) -> list[str]:
     return [m.strip() for m in (text or "").replace("\n", ",").split(",") if m.strip()][:5]
 
@@ -40,7 +49,7 @@ def load_llm_config(db: Session, task: str = "pick") -> LLMConfig | None:
         parse_models(get_global(db, f"llm_model_{task}"))
         or parse_models(get_global(db, "llm_model_override"))  # oude instelling
         or parse_models(cred.model)
-        or ["llama-3.3-70b-versatile"]
+        or [default_model(cred.base_url)]
     )
     return LLMConfig(base_url=cred.base_url or "https://api.groq.com/openai/v1", model=models[0], api_key=key,
                      fallbacks=tuple(models[1:]))

@@ -23,7 +23,7 @@
       <span id="test-{{ c.id }}">{% if c.last_test_status %}<span class="badge {{ 'badge-ok' if c.last_test_status == 'geldig' else ('badge-warn' if c.last_test_status == 'rate_limit' else 'badge-error') }}">laatste test: {{ c.last_test_status }}</span>{% endif %}</span>
     </div>
     <div class="muted" style="font-size:.85rem;margin:.35rem 0 .6rem">
-      {{ c.base_url }} · model <code>{{ c.model }}</code><br>
+      {{ c.base_url }} · model <code>{{ c.model or 'uit Instellingen / automatisch' }}</code><br>
       Toegevoegd {{ c.created_at|dt }} · gewijzigd {{ c.updated_at|dt }} · laatst gebruikt {{ c.last_used_at|dt }}
     </div>
     <div class="row">
@@ -49,7 +49,8 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="field"><label>Naam</label><input name="name" type="text" value="{{ c.name }}" required></div>
           <div class="field"><label>Base-URL</label><input name="base_url" type="url" value="{{ c.base_url }}" required></div>
-          <div class="field"><label>Model</label><input name="model" type="text" value="{{ c.model }}" required></div>
+          <div class="field"><label>Model <span class="muted" style="font-weight:400">(optioneel)</span></label><input name="model" type="text" value="{{ c.model or '' }}" placeholder="leeg = modellen uit Instellingen">
+            <div class="hint">Leeg: de modellen per taak bij Instellingen; staat daar ook niets, dan bij OpenRouter <code>openrouter/auto</code>.</div></div>
           <button class="btn btn-sm" type="submit">Opslaan</button>
         </form>
         <form method="post" action="/keys/{{ c.id }}/replace" autocomplete="off">
@@ -72,7 +73,7 @@
       <div class="grid-2">
         <div class="field"><label for="llm-name">Naam</label><input id="llm-name" name="name" type="text" value="Groq" required></div>
         <div class="field"><label for="llm-base">Base-URL</label><input id="llm-base" name="base_url" type="url" value="{{ default_base }}" required></div>
-        <div class="field"><label for="llm-model">Model</label><input id="llm-model" name="model" type="text" value="{{ default_model }}" required></div>
+        <div class="field"><label for="llm-model">Model</label><input id="llm-model" name="model" type="text" value="{{ default_model }}" placeholder="leeg = modellen uit Instellingen"></div>
         <div class="field"><label for="llm-key">API-key</label><input id="llm-key" name="api_key" type="password" autocomplete="new-password" required placeholder="gsk_…"></div>
       </div>
       <label class="row" style="font-weight:500"><input type="checkbox" name="make_active" value="1" checked> Maak deze configuratie actief</label>

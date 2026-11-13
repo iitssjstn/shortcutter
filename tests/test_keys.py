@@ -181,3 +181,22 @@ def test_openrouter_key_test_checks_key_endpoint(admin_client, monkeypatch):
         assert secret not in r.text
     assert "/api/v1/key" in paths
     assert "sk-…Xy12" in admin_client.get("/keys").text
+
+
+def test_model_optional_falls_back_to_openrouter_auto(admin_client):
+    from app.core.keys import load_llm_config
+
+    admin_client.post("/keys/llm", data={"name": "OpenRouter", "base_url": "https://openrouter.ai/api/v1",
+                                         "model": "openai/gpt-4o-mini", "api_key": "sk-or-v1-abc0000000000", "make_active": "1"})
+    db = new_session()
+    kid = db.scalar(select(Credential.id))
+    db.close()
+    r = admin_client.post(f"/keys/{kid}/edit", data={"name": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "model": ""})
+    assert r.status_code == 303
+    db = new_session()
+    assert db.get(Credential, kid).model is None
+    assert load_llm_config(db, "pick").models == ["openrouter/auto"]
+    db.close()
+    page = admin_client.get("/keys").text
+    assert "uit Instellingen / automatisch" in page and 'required placeholder="leeg' not in page
+    assert "openrouter/auto" in admin_client.get("/settings").text

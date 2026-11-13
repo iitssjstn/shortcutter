@@ -122,7 +122,7 @@ def add_llm(
         provider="llm",
         name=(name.strip() or "LLM")[:100],
         base_url=_clean_base_url(base_url),
-        model=(model.strip() or DEFAULT_LLM_MODEL)[:120],
+        model=model.strip()[:120] or None,
         encrypted_value=crypto.encrypt(secret),
         mask=crypto.mask_secret(secret),
         is_active=activate,
@@ -140,7 +140,7 @@ def edit_llm(
     kid: int,
     name: str = Form(...),
     base_url: str = Form(...),
-    model: str = Form(...),
+    model: str = Form(""),
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -149,7 +149,7 @@ def edit_llm(
         raise HTTPException(400, "Alleen LLM-configuraties hebben deze velden.")
     cred.name = (name.strip() or cred.name)[:100]
     cred.base_url = _clean_base_url(base_url)
-    cred.model = (model.strip() or cred.model)[:120]
+    cred.model = model.strip()[:120] or None  # leeg = modellen uit Instellingen / automatisch
     cred.updated_at = utcnow()
     audit(db, user, "sleutel_gewijzigd", f"llm #{cred.id} ({cred.name}): instellingen")
     db.commit()
@@ -271,7 +271,7 @@ def _test_openrouter(cred: Credential, key: str, client: httpx.Client) -> tuple[
         ids = {x.get("id") for x in m.json().get("data", [])} if m.status_code == 200 else set()
     except (httpx.HTTPError, ValueError, AttributeError):
         ids = set()
-    if ids and cred.model not in ids and not cred.model.startswith("openrouter/"):
+    if ids and cred.model and cred.model not in ids and not cred.model.startswith("openrouter/"):
         msg += f" Let op: model '{cred.model}' bestaat niet bij OpenRouter (gebruik bijv. 'meta-llama/llama-3.3-70b-instruct')."
     return "geldig", msg
 
@@ -289,7 +289,7 @@ def test_llm(cred: Credential, client: httpx.Client) -> tuple[str, str]:
             models = {m.get("id") for m in r.json().get("data", [])}
         except (ValueError, AttributeError):
             models = set()
-        if models and cred.model not in models:
+        if models and cred.model and cred.model not in models:
             return "geldig", f"Sleutel werkt, maar model '{cred.model}' staat niet in de lijst van de provider."
         return "geldig", "Sleutel werkt."
     if r.status_code in (401, 403):

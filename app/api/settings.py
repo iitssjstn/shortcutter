@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.common import redirect, render
 from app.core.auth import require_admin, require_user
 from app.core.db import get_db
-from app.core.keys import active_llm, parse_models, youtube_key
+from app.core.keys import active_llm, default_model, parse_models, youtube_key
 from app.core.models import Credential, Project, User
 from app.core.paths import dir_size, project_input, project_output
 from app.core.store import (
@@ -61,7 +61,7 @@ def settings_page(request: Request, user: User = Depends(require_user), db: Sess
                 "env_whisper": s.whisper_model,
                 "whisper_device": s.whisper_device,
                 "whisper_compute": s.whisper_compute,
-                "active_llm_model": llm.model if llm else None,
+                "active_llm_model": (llm.model or default_model(llm.base_url)) if llm else None,
                 "disk": disk,
                 "disk_total": total,
             }
