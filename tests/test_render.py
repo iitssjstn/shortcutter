@@ -223,23 +223,81 @@ class _FixedFace:
 
 
 def test_split_regions():
-    cam, game = framing.split_regions(1920, 1080, (0.12, 0.2, 0.06), game_x=0.5)
-    cw, ch, x, y = cam
-    assert abs(cw / ch - 1080 / 672) < 0.02 and x == 0 and y >= 0
-    assert x <= 0.12 * 1920 <= x + cw and y <= 0.2 * 1080 <= y + ch  # gezicht valt binnen de facecam-uitsnede
-    gw, gh, gx, gy = game
+    cam = (0.05, 0.06, 0.25, 0.26)  # 16:9-achtige facecam linksboven
+    (cw, ch, x, y), (gw, gh, gx, gy) = framing.split_regions(1920, 1080, cam, (0.17, 0.18), game_x=0.5)
+    assert abs(cw / ch - 1080 / 672) < 0.02
+    assert 0.05 * 1920 - 2 <= x and x + cw <= 0.30 * 1920 + 2 and 0.06 * 1080 - 2 <= y and y + ch <= 0.32 * 1080 + 2
     assert gh == 1080 and abs(gw / gh - 1080 / 1248) < 0.01 and abs((gx + gw / 2) - 960) <= 2
-    _, (gw2, _, gx2, _) = framing.split_regions(1920, 1080, (0.12, 0.2, 0.06), game_x=1.0)
+    _, (gw2, _, gx2, _) = framing.split_regions(1920, 1080, cam, None, game_x=1.0)
     assert gx2 + gw2 == 1920  # gameplay helemaal naar rechts
 
 
-def test_split_render(tmp_path, sample_video, monkeypatch):
+def _overlay_video(path, cam_x, cam_y, cam_w, cam_h):
+    """Bewegende 'gameplay' (pan door testsrc2) met een stilstaande facecam-overlay met rand."""
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=2560x720:rate=25:duration=5",
+         "-filter_complex",
+         f"[0:v]crop=1280:720:'t*200':0,drawbox=x={cam_x}:y={cam_y}:w={cam_w}:h={cam_h}:color=0x405060:t=fill,"
+         f"drawbox=x={cam_x}:y={cam_y}:w={cam_w}:h={cam_h}:color=white:t=4,"
+         f"drawbox=x={cam_x + cam_w // 3}:y={cam_y + cam_h // 4}:w={cam_w // 4}:h={cam_h // 2}:color=0xC09070:t=fill[v]",
+         "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(path)],
+        check=True,
+    )
+    return path
+
+
+def test_find_facecam_on_overlay(tmp_path, monkeypatch):
+    from app.pipeline import facecam
+
+    video = _overlay_video(tmp_path / "stream.mp4", 900, 420, 340, 250)
+    face = ((900 + 340 / 3 + 340 / 8) / 1280, (420 + 250 / 4 + 250 / 6) / 720, 85 / 1280)
+    frames = []
+
+    class Cam:
+        name = "nep"
+
+        def detect(self, frame):
+            return [(face[0], face[1], face[2], 0.9)]
+
+    framing.sample_faces(video, 0, 4.5, detector=Cam(), collect=frames)
+    activity, edges = facecam.analyse(frames)
+    box = facecam.find_facecam(activity, edges, face)
+    assert box is not None
+    x, y, w, h = box
+    assert abs(x - 900 / 1280) < 0.03 and abs(y - 420 / 720) < 0.04
+    assert abs(w - 340 / 1280) < 0.04 and abs(h - 250 / 720) < 0.05
+
+    # en via choose_framing: gesplitst met dat kader
+    monkeypatch.setattr(framing, "_detector", lambda: Cam())
+    fr = framing.choose_framing(video, 1280, 720, 0, 4.5, force_mode="split")
+    assert fr.mode == "split" and "vstack" in fr.filter
+    out = render.render_raw(video, 0.5, 2.5, fr.filter, tmp_path / "clip_01_raw.mp4")
+    assert (media.probe(out)["width"], media.probe(out)["height"]) == (1080, 1920)
+
+
+def test_full_frame_still_is_not_a_facecam():
+    import numpy as np
+
+    from app.pipeline import facecam
+
+    activity = np.full((180, 320), 0.5, np.float32)  # alles staat stil: webcam-shot
+    edges = np.zeros_like(activity)
+    assert facecam.find_facecam(activity, edges, (0.5, 0.4, 0.2)) is None
+
+
+def test_split_without_overlay_tracks_face(sample_video, monkeypatch):
+    """Gezicht maar geen overlay (testsrc beweegt overal): niet splitsen maar vullen en volgen."""
     monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([(0.15, 0.25, 0.08, 0.9)]))
     fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split")
-    assert fr.mode == "split" and "vstack" in fr.filter
+    assert fr.mode == "crop"
+
+
+def test_split_with_manual_box(tmp_path, sample_video, monkeypatch):
+    monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([]))
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split", facecam_box=(0.0, 0.0, 0.3, 0.3))
+    assert fr.mode == "split" and "crop=346:216:18:0" in fr.filter
     out = render.render_raw(sample_video, 0.5, 2.5, fr.filter, tmp_path / "clip_01_raw.mp4")
-    p = media.probe(out)
-    assert (p["width"], p["height"]) == (1080, 1920)
+    assert (media.probe(out)["width"], media.probe(out)["height"]) == (1080, 1920)
 
 
 def test_split_without_face_falls_back_to_fill(sample_video, monkeypatch):

@@ -100,6 +100,40 @@
 {% endif %}
 
 {% if project.status not in ACTIVE_STATUSES %}
+<section class="card" style="margin-top:1rem" id="facecam">
+  <details {% if project.framing == 'split' %}open{% endif %}>
+    <summary>Facecam aanwijzen (voor "Gesplitst")</summary>
+    <div class="details-body">
+      {% if has_source %}
+      <p class="hint" style="margin-top:0">
+        {% if facecam_pct %}Je hebt de facecam zelf aangewezen (rode rechthoek).{% else %}De facecam wordt nu automatisch herkend.{% endif %}
+        Sleep een rechthoek om de facecam om hem zelf aan te wijzen; dat geldt voor alle clips in dit project.
+        Zie je hier geen facecam, kies dan een ander moment.
+      </p>
+      <div class="facecam-picker" data-box="{{ facecam_pct }}">
+        <img src="/projects/{{ project.id }}/frame.jpg?t={{ frame_t }}" alt="Stilstaand beeld uit de video op {{ frame_t|ts }}" draggable="false">
+        <div class="facecam-sel" hidden></div>
+      </div>
+      <form method="get" action="/projects/{{ project.id }}" class="row" style="margin:.6rem 0">
+        <label for="frame_t" style="margin:0">Moment (s)</label>
+        <input id="frame_t" name="frame_t" type="number" min="0" step="1" value="{{ frame_t|int }}" style="width:7rem">
+        <button class="btn btn-sm" type="submit">Ander beeld</button>
+        {% for item in clips[:6] %}<a class="btn btn-sm" href="/projects/{{ project.id }}?frame_t={{ (item.clip.start + 1)|round(1) }}#facecam">clip {{ item.clip.index }}</a>{% endfor %}
+      </form>
+      <form method="post" action="/projects/{{ project.id }}/facecam" class="row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="x" id="fc-x"><input type="hidden" name="y" id="fc-y">
+        <input type="hidden" name="w" id="fc-w"><input type="hidden" name="h" id="fc-h">
+        <button class="btn btn-primary btn-sm" type="submit">Facecam opslaan en clips gesplitst renderen</button>
+        {% if facecam_pct %}<button class="btn btn-sm" type="submit" name="clear" value="1">Weer automatisch herkennen</button>{% endif %}
+      </form>
+      {% else %}
+      <p class="muted">Het bronbestand is niet (meer) beschikbaar; upload het opnieuw om de facecam aan te wijzen.</p>
+      {% endif %}
+    </div>
+  </details>
+</section>
+
 <section class="card" style="margin-top:1rem" id="manual">
   <details {% if not clips and project.status == 'done' %}open{% endif %}>
     <summary>Clip handmatig toevoegen</summary>

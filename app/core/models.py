@@ -172,6 +172,7 @@ class Project(Base, JsonMixin):
     max_dur: Mapped[int] = mapped_column(Integer, default=55)
     caption_style: Mapped[str] = mapped_column(String(32), default="geel")
     framing: Mapped[str] = mapped_column(String(16), default="auto")
+    facecam_box: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "x,y,w,h" fracties, handmatig
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

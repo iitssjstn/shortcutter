@@ -152,10 +152,20 @@ def _project_ctx(db: Session, user: User, project: Project) -> dict:
 
 
 @router.get("/projects/{pid}")
-def project_page(request: Request, pid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def project_page(
+    request: Request, pid: int, frame_t: float | None = None,
+    user: User = Depends(require_user), db: Session = Depends(get_db),
+):
+    from app.pipeline.facecam import parse_box
+
     project = get_project_for(db, user, pid)
     ctx = _project_ctx(db, user, project)
     ctx["nav"] = "dashboard"
+    box = parse_box(project.facecam_box)
+    ctx["facecam_pct"] = ",".join(f"{v * 100:.2f}" for v in box) if box else ""
+    if frame_t is None:
+        frame_t = (project.clips[0].start + 1.0) if project.clips else (project.duration or 10) * 0.3
+    ctx["frame_t"] = round(max(0.0, frame_t), 1)
     return render(request, "project.html", ctx)
 
 
@@ -217,6 +227,69 @@ def reframe_project(pid: int, framing: str = Form(...), user: User = Depends(req
     for c in project.clips:
         queue.enqueue(db, project, "render_clip", c.id)
     return redirect(f"/projects/{pid}", f"Alle {len(project.clips)} clips worden opnieuw gerenderd.")
+
+
+@router.get("/projects/{pid}/frame.jpg")
+def project_frame(pid: int, t: float = 0.0, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Stilstaand beeld uit de bron (voor het aanwijzen van de facecam)."""
+    import subprocess
+
+    project = get_project_for(db, user, pid)
+    src = find_source(pid)
+    if src is None:
+        raise HTTPException(404, "Bronbestand niet (meer) beschikbaar.")
+    t = max(0.0, min(float(t), (project.duration or t + 1) - 0.5))
+    res = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", str(src), "-frames:v", "1",
+         "-vf", "scale=960:-2", "-q:v", "4", "-f", "image2", "-c:v", "mjpeg", "-"],
+        capture_output=True, timeout=60,
+    )
+    if res.returncode != 0 or not res.stdout:
+        raise HTTPException(404, "Kon geen beeld uit de video halen.")
+    return Response(res.stdout, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+
+@router.post("/projects/{pid}/facecam")
+def set_facecam(
+    pid: int,
+    x: str = Form(""),
+    y: str = Form(""),
+    w: str = Form(""),
+    h: str = Form(""),
+    clear: str = Form(""),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Sla het facecam-kader op (in procenten van het beeld) en render de gesplitste clips opnieuw."""
+    from app.pipeline.facecam import format_box, parse_box
+
+    project = get_project_for(db, user, pid)
+    if project.status in ACTIVE_STATUSES:
+        return redirect(f"/projects/{pid}", "Wacht tot de verwerking klaar is.", "error")
+    if clear:
+        project.facecam_box = None
+        msg = "Facecam wordt weer automatisch herkend."
+    else:
+        try:
+            box = parse_box(",".join(str(float(v) / 100) for v in (x, y, w, h)))
+        except ValueError:
+            box = None
+        if box is None:
+            return redirect(f"/projects/{pid}#facecam", "Sleep eerst een rechthoek om de facecam.", "error")
+        project.facecam_box = format_box(box)
+        msg = "Facecam opgeslagen."
+    if project.framing != "split":
+        project.framing = "split"
+    targets = [c for c in project.clips if (c.framing_choice or project.framing) == "split"]
+    db.commit()
+    if find_source(pid) is None:
+        return redirect(f"/projects/{pid}", msg + " Upload de bron opnieuw om de clips opnieuw te renderen.", "error")
+    for c in targets:
+        c.status = "pending"
+    db.commit()
+    for c in targets:
+        queue.enqueue(db, project, "render_clip", c.id)
+    return redirect(f"/projects/{pid}", f"{msg} {len(targets)} clip(s) worden opnieuw gerenderd (gesplitst).")
 
 
 @router.post("/projects/{pid}/delete")

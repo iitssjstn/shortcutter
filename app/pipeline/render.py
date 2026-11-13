@@ -37,7 +37,7 @@ def render_raw(
         "-filter_complex", filter_complex, "-map", "[v]",
     ]
     if has_audio:
-        cmd += ["-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
+        cmd += ["-map", "0:a:0?", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
     else:
         cmd += ["-an"]
     cmd += X264 + ["-movflags", "+faststart", str(Path(out).resolve())]

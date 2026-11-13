@@ -17,6 +17,7 @@ from app.estimation.estimator import viral_score
 from app.pipeline import captions, framing, media, render
 from app.pipeline.download import download
 from app.pipeline.errors import PipelineError, RenderError, SourceMissing
+from app.pipeline.facecam import parse_box
 from app.pipeline.pick import pick_clips
 from app.pipeline.transcribe import all_words, transcribe
 
@@ -112,7 +113,8 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
         mode = clip.framing_choice or project.framing or "auto"
         cmd_name = f"{base}_crop.cmd"
         fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end,
-                                    force_mode=mode, face_x=clip.crop_x, cmd_file=cmd_name)
+                                    force_mode=mode, face_x=clip.crop_x, cmd_file=cmd_name,
+                                    facecam_box=parse_box(project.facecam_box))
         cmd_path = out_dir / cmd_name
         if fr.commands:
             cmd_path.write_text(fr.commands)

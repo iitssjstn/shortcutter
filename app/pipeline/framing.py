@@ -107,7 +107,8 @@ def _detector() -> _Detector | None:
 Sample = tuple[float, list[tuple[float, float, float, float]]]
 
 
-def sample_faces(video: Path, start: float, end: float, step: float = TRACK_STEP, detector=None) -> list[Sample] | None:
+def sample_faces(video: Path, start: float, end: float, step: float = TRACK_STEP, detector=None,
+                 collect: list | None = None) -> list[Sample] | None:
     """Meet elke `step` seconden de gezichten. Tijden zijn relatief aan `start`. None = geen detector."""
     import cv2
 
@@ -132,6 +133,12 @@ def sample_faces(video: Path, start: float, end: float, step: float = TRACK_STEP
             if not ok or frame is None:
                 break
             samples.append((i / fps, detector.detect(frame)))
+            if collect is not None:
+                from app.pipeline.facecam import WORK_W
+
+                fh, fw = frame.shape[:2]
+                small = cv2.resize(frame, (WORK_W, max(2, int(fh * WORK_W / fw))), interpolation=cv2.INTER_AREA)
+                collect.append(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY))
     finally:
         cap.release()
     return samples
@@ -225,26 +232,36 @@ def _even(v: float) -> int:
     return max(2, int(v) // 2 * 2)
 
 
-def split_regions(src_w: int, src_h: int, box: tuple[float, float, float], game_x: float = 0.5):
-    """Bereken (facecam-uitsnede, gameplay-uitsnede) als (w, h, x, y) in bronpixels."""
-    cx, cy, size = box
+def split_regions(src_w: int, src_h: int, cam: tuple[float, float, float, float],
+                  face: tuple[float, float] | None = None, game_x: float = 0.5):
+    """(facecam-uitsnede, gameplay-uitsnede) als (w, h, x, y) in bronpixels.
+
+    cam = facecam-kader (x, y, w, h) als fracties; daaruit wordt een stuk met de verhouding van
+    het bovenste vak gesneden, zo veel mogelijk gecentreerd op het gezicht.
+    """
     aspect_top = OUT_W / SPLIT_TOP_H
-    ch = min(src_h, max(120.0, size * src_w * 3.2))
-    cw = ch * aspect_top
-    if cw > src_w:
-        cw, ch = src_w, src_w / aspect_top
+    bx, by, bw, bh = cam[0] * src_w, cam[1] * src_h, cam[2] * src_w, cam[3] * src_h
+    fcx, fcy = (face[0] * src_w, face[1] * src_h) if face else (bx + bw / 2, by + bh / 2)
+    if bw / bh > aspect_top:  # kader is breder dan het vak: links/rechts bijsnijden
+        cw, ch = bh * aspect_top, bh
+        x = min(max(bx, fcx - cw / 2), bx + bw - cw)
+        y = by
+    else:  # kader is hoger: boven/onder bijsnijden, gezicht iets boven het midden
+        cw, ch = bw, bw / aspect_top
+        x = bx
+        y = min(max(by, fcy - ch * 0.45), by + bh - ch)
     cw, ch = _even(cw), _even(ch)
-    x = max(0, min(src_w - cw, int(cx * src_w - cw / 2)))
-    y = max(0, min(src_h - ch, int(cy * src_h - ch * 0.45)))
+    x = max(0, min(src_w - cw, int(x))) // 2 * 2
+    y = max(0, min(src_h - ch, int(y))) // 2 * 2
     aspect_bot = OUT_W / SPLIT_BOTTOM_H
     gh = src_h // 2 * 2
     gw = _even(min(src_w, gh * aspect_bot))
-    gx = max(0, min(src_w - gw, int(game_x * src_w - gw / 2)))
-    return (cw, ch, x // 2 * 2, y // 2 * 2), (gw, gh, gx // 2 * 2, 0)
+    gx = max(0, min(src_w - gw, int(game_x * src_w - gw / 2))) // 2 * 2
+    return (cw, ch, x, y), (gw, gh, gx, 0)
 
 
-def split_filter(src_w: int, src_h: int, box: tuple[float, float, float], game_x: float = 0.5) -> str:
-    (cw, ch, x, y), (gw, gh, gx, gy) = split_regions(src_w, src_h, box, game_x)
+def split_filter(src_w: int, src_h: int, cam, face=None, game_x: float = 0.5) -> str:
+    (cw, ch, x, y), (gw, gh, gx, gy) = split_regions(src_w, src_h, cam, face, game_x)
     return (
         "[0:v]split=2[cam][game];"
         f"[cam]crop={cw}:{ch}:{x}:{y},scale={OUT_W}:{SPLIT_TOP_H},setsar=1[top];"
@@ -358,6 +375,7 @@ def choose_framing(
     force_mode: str | None = None,
     face_x: float | None = None,
     cmd_file: str = "crop.cmd",
+    facecam_box: tuple[float, float, float, float] | None = None,
 ) -> Framing:
     """Kies de framing.
 
@@ -375,16 +393,25 @@ def choose_framing(
     if face_x is not None and mode != "split":  # gebruiker koos zelf een positie: vaste uitsnede
         fx = min(1.0, max(0.0, face_x))
         return Framing("crop", crop_filter(src_w, src_h, fx), 1.0, fx)
-    samples = sample_faces(video, start, end)
+    frames: list | None = [] if mode == "split" and facecam_box is None else None
+    samples = sample_faces(video, start, end, collect=frames)
     track = pick_track(samples) if samples else []
     hits = sum(1 for _, x in track if x is not None)
     ratio = hits / len(track) if track else (-1.0 if samples is None else 0.0)
     if mode == "split":
-        box = main_face_box(samples or [], track) if hits else None
+        from app.pipeline import facecam
+
+        face = main_face_box(samples or [], track) if hits else None
         game_x = 0.5 if face_x is None else min(1.0, max(0.0, face_x))
-        if box is not None:
-            return Framing("split", split_filter(src_w, src_h, box, game_x), max(ratio, 0.0), box[0])
-        # geen facecam gevonden: dan maar vullen (op de gekozen positie)
+        cam = facecam_box
+        if cam is None and face is not None and frames and len(frames) >= 4:
+            activity, edges = facecam.analyse(frames[:: max(1, len(frames) // 40)])
+            cam = facecam.find_facecam(activity, edges, face)
+        if cam is not None:
+            fpos = face[:2] if face and cam[0] <= face[0] <= cam[0] + cam[2] and cam[1] <= face[1] <= cam[1] + cam[3] else None
+            return Framing("split", split_filter(src_w, src_h, cam, fpos, game_x), max(ratio, 0.0), cam[0] + cam[2] / 2)
+        if hits:  # wel een gezicht, maar geen facecam-overlay (bijv. een webcam-shot): vullen en volgen
+            return _tracked(src_w, src_h, track, cmd_file, ratio)
         return Framing("crop", crop_filter(src_w, src_h, game_x), 0.0, game_x)
     if hits and (mode == "crop" or ratio >= FACE_RATIO):
         return _tracked(src_w, src_h, track, cmd_file, ratio)

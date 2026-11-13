@@ -136,6 +136,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .transcript button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: .3rem .4rem; border-radius: 6px; cursor: pointer; color: var(--text); font: inherit; }
 .transcript button:hover { background: var(--surface); }
 .transcript .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
+.facecam-picker { position: relative; display: inline-block; max-width: 100%; touch-action: none; cursor: crosshair; user-select: none; border-radius: 8px; overflow: hidden; line-height: 0; }
+.facecam-picker img { width: 100%; max-width: 960px; pointer-events: none; }
+.facecam-sel { position: absolute; border: 3px solid var(--accent); background: rgba(229, 72, 77, .18); box-sizing: border-box; }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .copybox { display: flex; gap: .5rem; }
 .copybox input { font-family: ui-monospace, monospace; font-size: .85rem; }

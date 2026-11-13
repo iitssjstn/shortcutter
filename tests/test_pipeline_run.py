@@ -267,3 +267,53 @@ def test_split_mode_via_clip_route(project_factory, settings, sample_video, monk
     assert c.framing_mode == "split" and c.framing_choice == "split" and c.crop_x == 0.7 and c.status == "ready"
     db.close()
     assert "gesplitst" in admin_client.get(f"/projects/{pid}").text
+
+
+def test_facecam_routes(project_factory, settings, sample_video, monkeypatch, admin_client, app):
+    from tests.conftest import create_user, login, make_client
+
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+    pid = project_factory()
+    _put_source(settings, pid, sample_video)
+    run_job_once()
+    page = admin_client.get(f"/projects/{pid}").text
+    assert "Facecam aanwijzen" in page and f"/projects/{pid}/frame.jpg?t=" in page
+    r = admin_client.get(f"/projects/{pid}/frame.jpg?t=1")
+    assert r.status_code == 200 and r.content[:2] == b"\xff\xd8"
+    # zonder rechthoek: nette melding
+    r = admin_client.post(f"/projects/{pid}/facecam", data={"x": "", "y": "", "w": "", "h": ""})
+    assert r.status_code == 303
+    db = new_session()
+    assert db.get(Project, pid).facecam_box is None
+    db.close()
+    # opslaan -> project wordt gesplitst en clips opnieuw gerenderd
+    r = admin_client.post(f"/projects/{pid}/facecam", data={"x": "0", "y": "0", "w": "30", "h": "30"})
+    assert r.status_code == 303
+    while run_job_once():
+        pass
+    db = new_session()
+    p = db.get(Project, pid)
+    assert p.facecam_box == "0.0000,0.0000,0.3000,0.3000" and p.framing == "split"
+    assert all(c.framing_mode == "split" and c.status == "ready" for c in p.clips)
+    db.close()
+    assert 'data-box="0.00,0.00,30.00,30.00"' in admin_client.get(f"/projects/{pid}").text
+    # wissen
+    admin_client.post(f"/projects/{pid}/facecam", data={"clear": "1"})
+    db = new_session()
+    assert db.get(Project, pid).facecam_box is None
+    db.close()
+    # een andere gebruiker kan het beeld en de facecam niet zien of wijzigen
+    create_user("eve")
+    eve = make_client(app)
+    login(eve, "eve")
+    assert eve.get(f"/projects/{pid}/frame.jpg?t=1").status_code == 404
+    assert eve.post(f"/projects/{pid}/facecam", data={"x": "0", "y": "0", "w": "30", "h": "30"}).status_code == 404
+
+
+def test_parse_box():
+    from app.pipeline.facecam import format_box, parse_box
+
+    assert parse_box("0.1,0.2,0.3,0.4") == (0.1, 0.2, 0.3, 0.4)
+    assert parse_box(format_box((0.1, 0.2, 0.3, 0.4))) == (0.1, 0.2, 0.3, 0.4)
+    for bad in (None, "", "a,b,c,d", "0.9,0.9,0.5,0.5", "0,0,0,0.5", "-0.1,0,0.5,0.5"):
+        assert parse_box(bad) is None

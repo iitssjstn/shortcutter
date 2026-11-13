@@ -88,5 +88,36 @@
     if (k) { k.placeholder = b.getAttribute("data-preset-prefix"); k.focus(); }
   });
 
-  document.addEventListener("DOMContentLoaded", updateSelection);
+  // Facecam aanwijzen: rechthoek slepen over het stilstaande beeld
+  function initFacecamPicker(box) {
+    var img = box.querySelector("img"), sel = box.querySelector(".facecam-sel");
+    var start = null;
+    function show(x, y, w, h) {
+      sel.hidden = false;
+      sel.style.left = x + "%"; sel.style.top = y + "%"; sel.style.width = w + "%"; sel.style.height = h + "%";
+      var set = function (id, v) { var el = document.getElementById(id); if (el) el.value = v.toFixed(2); };
+      set("fc-x", x); set("fc-y", y); set("fc-w", w); set("fc-h", h);
+    }
+    function pos(e) {
+      var r = img.getBoundingClientRect();
+      return { x: Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100)),
+               y: Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100)) };
+    }
+    var initial = (box.getAttribute("data-box") || "").split(",").map(parseFloat);
+    if (initial.length === 4 && initial.every(function (v) { return !isNaN(v); })) show.apply(null, initial);
+    box.addEventListener("pointerdown", function (e) {
+      e.preventDefault(); start = pos(e); box.setPointerCapture(e.pointerId);
+    });
+    box.addEventListener("pointermove", function (e) {
+      if (!start) return;
+      var p = pos(e);
+      show(Math.min(start.x, p.x), Math.min(start.y, p.y), Math.abs(p.x - start.x), Math.abs(p.y - start.y));
+    });
+    box.addEventListener("pointerup", function () { start = null; });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    updateSelection();
+    document.querySelectorAll(".facecam-picker").forEach(initFacecamPicker);
+  });
 })();
