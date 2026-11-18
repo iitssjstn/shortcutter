@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Twitch{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Twitch-clips</h1>
+    <p class="muted">Zet de best bekeken clips van een kanaal om in shorts. Alleen voor je eigen kanaal of voor streamers die je toestemming hebben gegeven.</p>
+  </div>
+</div>
+
+{% if not has_key %}
+<div class="flash flash-warn">Er is nog geen Twitch API-sleutel ingesteld.
+  {% if user.is_admin %}<a href="/keys#twitch">Voeg hem toe bij API-sleutels</a> (gratis via dev.twitch.tv).{% else %}Vraag de beheerder om er een toe te voegen.{% endif %}
+  Losse Twitch-links (clip of VOD) kun je wel gewoon op het <a href="/">dashboard</a> plakken.</div>
+{% endif %}
+
+<div class="twitch-layout">
+  <aside class="card">
+    <h2>Kanalen</h2>
+    {% for c in channels %}
+    <a class="channel-item {{ 'active' if selected and selected.id == c.id }}" href="/twitch?channel={{ c.id }}&period={{ period }}">
+      {% if c.profile_image_url %}<img src="{{ c.profile_image_url }}" alt="" loading="lazy">{% else %}<span class="channel-ph"></span>{% endif %}
+      <span><strong>{{ c.display_name }}</strong><br><span class="muted" style="font-size:.78rem">{{ 'eigen kanaal' if c.relation == 'eigen' else 'met toestemming' }}</span></span>
+    </a>
+    {% else %}
+    <p class="muted" style="font-size:.9rem">Nog geen kanalen.</p>
+    {% endfor %}
+    <details {% if not channels %}open{% endif %} style="margin-top:.75rem">
+      <summary>Kanaal toevoegen</summary>
+      <form method="post" action="/twitch/channels" class="details-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field"><label for="tw-login">Kanaalnaam</label><input id="tw-login" name="login" type="text" placeholder="bijv. mijnkanaal of twitch.tv/mijnkanaal" required></div>
+        <div class="field"><label for="tw-rel">Relatie</label>
+          <select id="tw-rel" name="relation"><option value="toestemming">Streamer heeft mij toestemming gegeven</option><option value="eigen">Mijn eigen kanaal</option></select></div>
+        <div class="field"><label for="tw-note">Afspraak / notitie <span class="muted" style="font-weight:400">(optioneel)</span></label>
+          <textarea id="tw-note" name="note" rows="2" placeholder="bijv. via Discord akkoord op 12-11, credit in beschrijving"></textarea></div>
+        <label class="row" style="font-weight:500;align-items:flex-start"><input type="checkbox" name="confirm" value="1" required style="margin-top:.25rem">
+          <span>Ik bevestig dat dit mijn eigen kanaal is of dat ik toestemming van de streamer heb om clips te bewerken en te posten.</span></label>
+        <button class="btn btn-primary btn-sm" type="submit" style="margin-top:.6rem" {% if not has_key %}disabled{% endif %}>Toevoegen</button>
+      </form>
+    </details>
+  </aside>
+
+  <section>
+    {% if selected %}
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <h2 style="margin:0">{{ selected.display_name }}</h2>
+          <span class="muted" style="font-size:.85rem">twitch.tv/{{ selected.login }}{% if selected.permission_note %} · {{ selected.permission_note }}{% endif %}</span>
+        </div>
+        <div class="row">
+          {% for k, label in periods.items() %}<a class="btn btn-sm {{ 'btn-primary' if period == k }}" href="/twitch?channel={{ selected.id }}&period={{ k }}">{{ label }}</a>{% endfor %}
+        </div>
+      </div>
+    </div>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+    {% if clips %}
+    <form method="post" action="/twitch/import">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="channel_id" value="{{ selected.id }}">
+      <input type="hidden" name="period" value="{{ period }}">
+      <div class="toolbar">
+        <label class="row" style="margin:0;font-weight:500"><input type="checkbox" id="select-all-twitch"> Alles selecteren</label>
+        <span class="spacer"></span>
+        <label for="tw-framing" style="margin:0">Beeldvulling</label>
+        <select id="tw-framing" name="framing" style="width:auto">
+          {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if k == framing_default %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">Maak shorts van selectie</button>
+      </div>
+      <div class="twitch-grid">
+        {% for c in clips %}
+        <label class="twitch-clip {{ 'done' if c.url in imported }}">
+          {% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" loading="lazy">{% else %}<span class="twitch-thumb-ph"></span>{% endif %}
+          <span class="twitch-clip-body">
+            <span class="row" style="justify-content:space-between;flex-wrap:nowrap">
+              <span class="twitch-title">{{ c.title }}</span>
+              <input type="checkbox" class="twitch-check" name="urls" value="{{ c.url }}" {% if c.url in imported %}disabled{% endif %}>
+            </span>
+            <span class="muted" style="font-size:.8rem">{{ fmt_views(c.views) }} views · {{ '%.0f'|format(c.duration) }} s · {{ c.created_at[:10] }}{% if c.creator %} · clip door {{ c.creator }}{% endif %}</span>
+            {% if c.url in imported %}<span class="badge badge-ok">al omgezet</span>{% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </form>
+    {% elif has_key and not error %}
+    <div class="card empty">Geen clips in deze periode. Kies een langere periode.</div>
+    {% endif %}
+    <form method="post" action="/twitch/channels/{{ selected.id }}/delete" data-confirm="Kanaal uit je lijst verwijderen?" style="margin-top:1rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="linklike" type="submit">Kanaal verwijderen</button>
+    </form>
+    {% else %}
+    <div class="card empty">Voeg links een kanaal toe om de top-clips te zien.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

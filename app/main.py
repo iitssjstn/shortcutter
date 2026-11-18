@@ -23,7 +23,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
 SETUP_EXEMPT = ("/setup", "/static/", "/healthz", "/favicon.ico")
 
 CSP = (
-    "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "default-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://clips-media-assets2.twitch.tv; media-src 'self'; style-src 'self' 'unsafe-inline'; "
     "script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 )
 
@@ -132,9 +132,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def favicon():
         return RedirectResponse("/static/favicon.svg")
 
-    from app.api import account, auth, clips, downloads, keys, projects, settings as settings_api, stats, users
+    from app.api import account, auth, clips, downloads, keys, projects, settings as settings_api, stats, twitch, users
 
-    for mod in (auth, projects, clips, downloads, stats, settings_api, keys, users, account):
+    for mod in (auth, projects, clips, downloads, stats, settings_api, keys, users, account, twitch):
         app.include_router(mod.router)
     return app
 

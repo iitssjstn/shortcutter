@@ -139,6 +139,17 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .facecam-picker { position: relative; display: inline-block; max-width: 100%; touch-action: none; cursor: crosshair; user-select: none; border-radius: 8px; overflow: hidden; line-height: 0; }
 .facecam-picker img { width: 100%; max-width: 960px; pointer-events: none; }
 .facecam-sel { position: absolute; border: 3px solid var(--accent); background: rgba(229, 72, 77, .18); box-sizing: border-box; }
+.twitch-layout { display: grid; grid-template-columns: 260px 1fr; gap: 1rem; align-items: start; }
+.channel-item { display: flex; gap: .6rem; align-items: center; padding: .45rem; border-radius: 8px; text-decoration: none; }
+.channel-item:hover, .channel-item.active { background: var(--surface-2); }
+.channel-item img, .channel-ph { width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); flex: none; }
+.twitch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .8rem; }
+.twitch-clip { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; cursor: pointer; margin: 0; font-weight: 400; }
+.twitch-clip:has(.twitch-check:checked) { outline: 2px solid var(--accent); }
+.twitch-clip.done { opacity: .6; cursor: default; }
+.twitch-clip img, .twitch-thumb-ph { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--surface-2); display: block; }
+.twitch-clip-body { padding: .6rem; display: flex; flex-direction: column; gap: .3rem; }
+.twitch-title { font-weight: 600; font-size: .9rem; line-height: 1.3; }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .copybox { display: flex; gap: .5rem; }
 .copybox input { font-family: ui-monospace, monospace; font-size: .85rem; }
@@ -163,4 +174,5 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .hero { grid-template-columns: 1fr; }
   .clip-grid { grid-template-columns: 1fr; }
   .clip-video { max-height: 70vh; }
+  .twitch-layout { grid-template-columns: 1fr; }
 }

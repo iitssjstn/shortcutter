@@ -119,6 +119,23 @@ class Credential(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
+class TwitchChannel(Base):
+    """Twitch-kanaal waarvan een gebruiker clips mag gebruiken (eigen kanaal of met toestemming)."""
+
+    __tablename__ = "twitch_channels"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    login: Mapped[str] = mapped_column(String(40))
+    display_name: Mapped[str] = mapped_column(String(80), default="")
+    broadcaster_id: Mapped[str] = mapped_column(String(40), default="")
+    profile_image_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    relation: Mapped[str] = mapped_column(String(20), default="toestemming")  # eigen | toestemming
+    permission_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("owner_id", "login", name="uq_twitch_owner_login"),)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -174,6 +191,7 @@ class Project(Base, JsonMixin):
     caption_style: Mapped[str] = mapped_column(String(32), default="geel")
     framing: Mapped[str] = mapped_column(String(16), default="auto")
     facecam_box: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "x,y,w,h" fracties, handmatig
+    credit: Mapped[str | None] = mapped_column(String(200), nullable=True)  # naamsvermelding, bijv. twitch.tv/naam
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -253,7 +271,9 @@ class Clip(Base, JsonMixin):
         """Beschrijving + hashtags, klaar om te plakken."""
         desc = (self.description or self.hook or "").strip()
         tags = (self.hashtags or "#shorts").strip()
-        return f"{desc}\n\n{tags}" if desc else tags
+        credit = (self.project.credit or "").strip() if self.project is not None else ""
+        parts = [p for p in (desc, f"🎥 {credit}" if credit else "", tags) if p]
+        return "\n\n".join(parts)
 
 
 class Job(Base, JsonMixin):

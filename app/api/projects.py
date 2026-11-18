@@ -18,7 +18,8 @@ from app.core.models import Job, Project, User
 from app.core.paths import dir_size, find_source, project_input, project_output, safe_child
 from app.core.store import FRAMING_MODES, get_global_int, get_project_for, user_settings
 from app.estimation.service import clip_estimate, user_calibration
-from app.pipeline.download import is_valid_url
+from app.pipeline.download import is_valid_url, url_platform
+from app.integrations.twitch import twitch_credit
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript
 from app.worker import queue
 
@@ -86,7 +87,7 @@ def create_project(
     if not url and not has_file:
         return redirect("/", "Plak een YouTube-link of kies een videobestand.", "error")
     if url and not has_file and not is_valid_url(url):
-        return redirect("/", "Dat lijkt geen geldige YouTube-link.", "error")
+        return redirect("/", "Dat lijkt geen geldige YouTube- of Twitch-link.", "error")
     if has_file:
         check_upload(file)
     num_clips = max(1, min(20, num_clips))
@@ -104,7 +105,8 @@ def create_project(
     us = user_settings(db, user.id)
     project = Project(
         owner_id=user.id,
-        source_type="upload" if has_file else "youtube",
+        source_type="upload" if has_file else url_platform(url),
+        credit=twitch_credit(url) if not has_file else None,
         source_url=None if has_file else url,
         source_filename=file.filename[:255] if has_file else None,
         title=(file.filename.rsplit(".", 1)[0][:300] if has_file else ""),

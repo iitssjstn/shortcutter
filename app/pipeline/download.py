@@ -24,10 +24,32 @@ _BLOCKED_PATTERNS = re.compile(
 )
 
 YOUTUBE_RE = re.compile(r"^https?://([a-z0-9-]+\.)?(youtube\.com|youtu\.be)/", re.I)
+TWITCH_RE = re.compile(
+    r"^https?://(?:(?:www|m|go)\.)?twitch\.tv/(?:videos/\d+|[A-Za-z0-9_]{2,25}/(?:clip|v|video)/[A-Za-z0-9_-]+)"
+    r"|^https?://clips\.twitch\.tv/[A-Za-z0-9_-]+",
+    re.I,
+)
+TWITCH_CLIP_RE = re.compile(r"(?:clips\.twitch\.tv/|twitch\.tv/[A-Za-z0-9_]+/clip/)([A-Za-z0-9_-]+)", re.I)
+
+
+def url_platform(url: str) -> str | None:
+    url = (url or "").strip()
+    if len(url) >= 500:
+        return None
+    if YOUTUBE_RE.match(url):
+        return "youtube"
+    if TWITCH_RE.match(url):
+        return "twitch"
+    return None
 
 
 def is_valid_url(url: str) -> bool:
-    return bool(YOUTUBE_RE.match(url.strip())) and len(url) < 500
+    return url_platform(url) is not None
+
+
+def twitch_clip_slug(url: str) -> str | None:
+    m = TWITCH_CLIP_RE.search(url or "")
+    return m.group(1) if m else None
 
 
 def _clean_error(msg: str) -> str:
@@ -59,10 +81,12 @@ def download(url: str, out_dir: Path, cookies_file: Path | None = None) -> tuple
     except Exception as exc:  # yt_dlp.utils.DownloadError e.a.
         msg = _clean_error(str(exc))
         if _BLOCKED_PATTERNS.search(msg):
+            site = "Twitch" if "twitch.tv" in url else "YouTube"
             raise DownloadBlocked(
-                "YouTube blokkeert de download ("
+                f"{site} blokkeert de download ("
                 + msg
-                + "). Upload het bronbestand zelf, of voeg een cookies.txt toe bij API-sleutels."
+                + "). Upload het bronbestand zelf"
+                + (", of voeg een cookies.txt toe bij API-sleutels." if site == "YouTube" else ".")
             ) from exc
         raise DownloadFailed(f"Downloaden mislukt: {msg}") from exc
     if info is None:

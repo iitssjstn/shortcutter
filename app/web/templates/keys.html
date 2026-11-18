@@ -126,6 +126,33 @@
   </section>
 </div>
 
+<section class="card" id="twitch">
+  <h2>Twitch API <span class="badge">optioneel</span></h2>
+  <p class="muted" style="font-size:.9rem">Nodig voor de pagina <a href="/twitch">Twitch</a> (top-clips van kanalen ophalen). Maak gratis een app aan op
+    <code>dev.twitch.tv/console/apps</code> (OAuth redirect-URL: <code>http://localhost</code>, categorie: Application Integration) en vul de client-ID en het client-secret in.
+    Shortcutter leest alleen openbare clipgegevens en plaatst niets op Twitch.</p>
+  {% if twitch %}
+  <div class="row"><code>{{ twitch.mask }}</code><span class="muted" style="font-size:.85rem">toegevoegd {{ twitch.created_at|dt }} · laatst gebruikt {{ twitch.last_used_at|dt }}</span>
+    <span id="test-{{ twitch.id }}">{% if twitch.last_test_status %}<span class="badge {{ 'badge-ok' if twitch.last_test_status == 'geldig' else 'badge-error' }}">laatste test: {{ twitch.last_test_status }}</span>{% endif %}</span></div>
+  <div class="row" style="margin:.5rem 0">
+    <form method="post" action="/keys/{{ twitch.id }}/test" class="inline" hx-post="/keys/{{ twitch.id }}/test" hx-target="#test-{{ twitch.id }}" hx-swap="innerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-sm" type="submit">Test sleutel</button>
+    </form>
+    <form method="post" action="/keys/{{ twitch.id }}/delete" class="inline" data-confirm="Twitch-sleutel verwijderen?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+    </form>
+  </div>
+  {% endif %}
+  <form method="post" action="/keys/twitch" autocomplete="off" class="grid-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label for="tw-id">Client-ID</label><input id="tw-id" name="client_id" type="password" autocomplete="off" required></div>
+    <div class="field"><label for="tw-secret">Client-secret</label><input id="tw-secret" name="client_secret" type="password" autocomplete="new-password" required></div>
+    <div><button class="btn" type="submit">{{ 'Vervangen' if twitch else 'Opslaan' }}</button></div>
+  </form>
+</section>
+
 <section class="card">
   <h2>Auditlog</h2>
   {% if logs %}

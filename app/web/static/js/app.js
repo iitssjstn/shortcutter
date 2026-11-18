@@ -41,6 +41,9 @@
   }
   document.addEventListener("change", function (e) {
     if (e.target.matches(".clip-check")) updateSelection();
+    if (e.target.id === "select-all-twitch") {
+      document.querySelectorAll(".twitch-check:not(:disabled)").forEach(function (b) { b.checked = e.target.checked; });
+    }
     if (e.target.id === "select-all") {
       document.querySelectorAll(".clip-check").forEach(function (b) { b.checked = e.target.checked; });
       updateSelection();

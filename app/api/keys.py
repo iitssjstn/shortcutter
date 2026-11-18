@@ -14,7 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.common import redirect, render
+import json
+
 from app.core import crypto
+from app.integrations import twitch
 from app.core.auth import require_admin
 from app.core.db import get_db
 from app.core.models import AuditLog, Credential, User, utcnow
@@ -31,7 +34,8 @@ LLM_PRESETS = [
     {"label": "Groq", "base_url": DEFAULT_LLM_BASE, "model": DEFAULT_LLM_MODEL, "prefix": "gsk_…"},
     {"label": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "prefix": "sk-…"},
 ]
-PROVIDER_LABELS = {"llm": "LLM (OpenAI-compatibel)", "youtube": "YouTube Data API", "cookies": "yt-dlp cookies.txt"}
+PROVIDER_LABELS = {"llm": "LLM (OpenAI-compatibel)", "youtube": "YouTube Data API", "cookies": "yt-dlp cookies.txt",
+                   "twitch": "Twitch API"}
 
 
 def public(c: Credential) -> dict:
@@ -87,6 +91,7 @@ def keys_page(request: Request, user: User = Depends(require_admin), db: Session
             "llm": [c for c in creds if c.provider == "llm"],
             "youtube": next((c for c in creds if c.provider == "youtube"), None),
             "cookies": next((c for c in creds if c.provider == "cookies"), None),
+            "twitch": next((c for c in creds if c.provider == "twitch"), None),
             "logs": logs,
             "default_base": DEFAULT_LLM_BASE,
             "default_model": DEFAULT_LLM_MODEL,
@@ -218,6 +223,33 @@ def set_youtube(api_key: str = Form(...), user: User = Depends(require_admin), d
     return redirect("/keys", "YouTube Data API-sleutel opgeslagen.")
 
 
+@router.post("/keys/twitch")
+def set_twitch(
+    client_id: str = Form(...),
+    client_secret: str = Form(...),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    cid = _clean_secret(client_id)
+    secret = _clean_secret(client_secret)
+    cred = twitch.credential(db)
+    if cred is None:
+        cred = Credential(provider="twitch", name="Twitch API", created_by=user.id, encrypted_value=b"", mask="")
+        db.add(cred)
+        action = "sleutel_toegevoegd"
+    else:
+        action = "sleutel_vervangen"
+    cred.encrypted_value = twitch.encode_creds(cid, secret)
+    cred.mask = f"ID {crypto.mask_secret(cid)} · secret {crypto.mask_secret(secret)}"
+    cred.updated_at = utcnow()
+    cred.is_active = True
+    cred.last_test_status = None
+    db.flush()
+    audit(db, user, action, f"twitch #{cred.id}")
+    db.commit()
+    return redirect("/keys", "Twitch API-sleutel opgeslagen.")
+
+
 @router.post("/keys/cookies")
 def upload_cookies(file: UploadFile = File(...), user: User = Depends(require_admin), db: Session = Depends(get_db)):
     data = file.file.read(MAX_COOKIES_BYTES + 1)
@@ -323,6 +355,12 @@ def test_key(request: Request, kid: int, user: User = Depends(require_admin), db
     cred = _get(db, kid)
     if cred.provider == "cookies":
         status, msg = "geldig", "cookies.txt is opgeslagen; yt-dlp gebruikt hem bij de volgende download."
+    elif cred.provider == "twitch":
+        try:
+            data = json.loads(crypto.decrypt_str(cred.encrypted_value))
+            status, msg = twitch.test_creds(data.get("client_id", ""), data.get("client_secret", ""))
+        except (RuntimeError, ValueError) as exc:
+            status, msg = "fout", str(exc)
     else:
         try:
             with _test_client_factory() as client:

@@ -95,6 +95,35 @@ def write_clips_json(db: Session, project: Project) -> Path:
     return path
 
 
+def _auto_post_text(db: Session, project: Project) -> None:
+    """Probeer meteen posttekst te laten schrijven voor clips zonder beschrijving. Faalt stil."""
+    from app.pipeline.copywriting import generate_post_texts
+    from app.pipeline.errors import LLMError
+
+    cfg = load_llm_config(db, "copy")
+    todo = [c for c in project.clips if not c.description]
+    if cfg is None or not todo:
+        return
+    transcript = load_transcript(project.id) or {"segments": []}
+    words = all_words(transcript)
+    from app.core.store import user_settings
+
+    lang = user_settings(db, project.owner_id).post_language or "en"
+    items = [{"id": c.id, "text": " ".join(w["word"] for w in words if c.start <= w["start"] < c.end) or c.title,
+              "title": c.title} for c in todo]
+    try:
+        result = generate_post_texts(cfg, items, language=lang)
+    except LLMError as exc:
+        project.add_warning(f"Posttekst genereren mislukt ({exc}); gebruik 'Posttekst voor alle clips'.")
+        db.commit()
+        return
+    for c in todo:
+        r = result.get(c.id)
+        if r:
+            c.title, c.description, c.hashtags = r["title"], r["description"], r["hashtags"]
+    db.commit()
+
+
 def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: dict) -> None:
     """Render één clip. Faalt nooit hard: zet clip.status en render_error."""
     project = clip.project
@@ -180,12 +209,15 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
         # 1. bron
         source = find_source(project.id)
         if source is None:
-            if project.source_type != "youtube" or not project.source_url:
+            if project.source_type not in ("youtube", "twitch") or not project.source_url:
                 raise SourceMissing("Het bronbestand ontbreekt. Upload het bestand opnieuw om verder te gaan.")
             _set(db, project, "downloading", 3, "Video downloaden met yt-dlp…")
-            with cookies_file(db, project_input(project.id)) as cookies:
-                source, meta = download(project.source_url, project_input(project.id), cookies)
-            if meta.get("title"):
+            if project.source_type == "youtube":
+                with cookies_file(db, project_input(project.id)) as cookies:
+                    source, meta = download(project.source_url, project_input(project.id), cookies)
+            else:
+                source, meta = download(project.source_url, project_input(project.id), None)
+            if meta.get("title") and not project.title:
                 project.title = meta["title"][:300]
         project.source_deleted = False
         info = _probe(project, source)
@@ -206,6 +238,18 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
         )
 
         # 3. fragmentkeuze (alleen als er nog geen clips zijn, bv. bij opnieuw proberen)
+        dur = info.get("duration") or 0
+        if not project.clips and 1.0 < dur <= project.max_dur + 0.5:
+            db.add(Clip(
+                project_id=project.id, owner_id=project.owner_id, index=1, start=0.0, end=round(dur, 2),
+                title=(project.title or "Clip")[:120], hook="", reason="Korte bron: in zijn geheel gebruikt.",
+                source="volledig", subscores_json=json.dumps({k: 6 for k in (
+                    "hook_sterkte", "emotie_of_verrassing", "begrijpelijkheid_zonder_context", "afronding")}),
+            ))
+            project.picker_used = "volledig"
+            db.commit()
+            db.refresh(project)
+            _auto_post_text(db, project)
         if not project.clips:
             _set(db, project, "picking", 58, "Fragmenten kiezen…")
             cfg = load_llm_config(db, "pick")

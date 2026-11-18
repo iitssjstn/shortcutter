@@ -163,6 +163,25 @@ Bij Instellingen (admin) stel je in na hoeveel dagen bronbestanden van afgeronde
 verwijderd worden (standaard 7; clips blijven bewaard) en optioneel hele projecten. Je ziet daar
 ook het schijfgebruik per project.
 
+## Twitch-clips
+
+Shortcutter accepteert naast YouTube ook Twitch-links (clip, VOD of tijdstempel). Een korte bron, zoals een
+Twitch-clip, wordt in zijn geheel één short.
+
+Op de pagina **Twitch** voeg je kanalen toe waarvan je clips mag gebruiken: je **eigen kanaal** of een streamer die
+je **toestemming** heeft gegeven (met een vinkje en een notitie over de afspraak). Per kanaal zie je de best bekeken
+clips van de afgelopen dag, week, maand of altijd, en maak je er met één klik of in bulk shorts van (standaard
+"Gesplitst": facecam boven, gameplay onder). De posttekst krijgt automatisch een credit (`twitch.tv/kanaal`).
+Kanalen zijn persoonlijk: elke gebruiker ziet alleen zijn eigen lijst.
+
+Hiervoor heeft de beheerder een gratis Twitch-app nodig: maak er een op `dev.twitch.tv/console/apps`
+(redirect-URL `http://localhost`, categorie *Application Integration*) en vul client-ID en client-secret in bij
+**API-sleutels**. Shortcutter leest alleen openbare clipgegevens en plaatst niets op Twitch.
+
+> Clips zijn van de streamer en de game-beelden van de uitgever. Gebruik alleen clips met toestemming, vermeld de
+> streamer, en voeg zelf iets toe (ondertitels, selectie, titel): zonder toestemming riskeer je claims of strikes, en
+> YouTube kan herplaatste content demonetiseren.
+
 ## Hoe de view-schatting werkt (en wat de beperkingen zijn)
 
 Views zijn niet te voorspellen. Shortcutter toont daarom altijd een **bereik** met het label
