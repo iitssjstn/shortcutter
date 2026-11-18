@@ -205,6 +205,14 @@ class Project(Base, JsonMixin):
     def warnings(self) -> list[str]:
         return self._load(self.warnings_json, [])
 
+    def set_clip_warning(self, index: int, msg: str | None) -> None:
+        """Eén waarschuwing per clip (wordt vervangen bij opnieuw renderen)."""
+        prefix = f"Clip {index}: "
+        w = [x for x in self.warnings if not x.startswith(prefix)]
+        if msg:
+            w.append(prefix + msg)
+        self.warnings_json = json.dumps(w, ensure_ascii=False)
+
     def add_warning(self, msg: str) -> None:
         w = self.warnings
         if msg not in w:

@@ -95,6 +95,14 @@ def write_clips_json(db: Session, project: Project) -> Path:
     return path
 
 
+SPLIT_NOTES = {
+    "geschat": "facecam-kader geschat (niet zeker herkend). Klopt het niet? Wijs de facecam aan bij 'Facecam aanwijzen'.",
+    "webcam-shot": "geen facecam-overlay maar een schermvullende webcam; gevuld in plaats van gesplitst.",
+    "geen facecam": "geen facecam gevonden; gevuld in plaats van gesplitst. Wijs de facecam aan bij 'Facecam aanwijzen'.",
+    "geen gezicht": "geen gezicht gevonden; gevuld in plaats van gesplitst. Wijs de facecam aan bij 'Facecam aanwijzen'.",
+}
+
+
 def _auto_post_text(db: Session, project: Project) -> None:
     """Probeer meteen posttekst te laten schrijven voor clips zonder beschrijving. Faalt stil."""
     from app.pipeline.copywriting import generate_post_texts
@@ -144,6 +152,7 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
         fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end,
                                     force_mode=mode, face_x=clip.crop_x, cmd_file=cmd_name,
                                     facecam_box=parse_box(project.facecam_box))
+        project.set_clip_warning(clip.index, SPLIT_NOTES.get(fr.note) if mode == "split" else None)
         cmd_path = out_dir / cmd_name
         if fr.commands:
             cmd_path.write_text(fr.commands)

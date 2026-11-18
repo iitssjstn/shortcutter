@@ -285,11 +285,58 @@ def test_full_frame_still_is_not_a_facecam():
     assert facecam.find_facecam(activity, edges, (0.5, 0.4, 0.2)) is None
 
 
-def test_split_without_overlay_tracks_face(sample_video, monkeypatch):
-    """Gezicht maar geen overlay (testsrc beweegt overal): niet splitsen maar vullen en volgen."""
+def test_split_without_overlay_still_splits_with_estimate(sample_video, monkeypatch):
+    """Klein gezicht maar geen herkenbaar kader: toch gesplitst, met een geschat kader en een melding."""
     monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([(0.15, 0.25, 0.08, 0.9)]))
     fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split")
-    assert fr.mode == "crop"
+    assert fr.mode == "split" and fr.note == "geschat"
+
+
+def test_split_with_big_face_is_webcam_shot(sample_video, monkeypatch):
+    monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([(0.5, 0.4, 0.3, 0.9)]))
+    fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split")
+    assert fr.mode == "crop" and fr.note == "webcam-shot"
+
+
+def test_contrast_method_on_dark_still_scene(tmp_path, monkeypatch):
+    """Donkere, rustige gameplay met stilstaand dashboard; facecam linksonder tegen de rand, zonder kader."""
+    from app.pipeline import facecam
+
+    video = tmp_path / "nacht.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0x101418:s=1280x720:d=5:r=25",
+         "-f", "lavfi", "-i", "testsrc2=size=320x220:rate=25:duration=5",
+         "-filter_complex",
+         "[0:v]drawbox=x=340:y=540:w=940:h=180:color=0x2a2e33:t=fill,"
+         "drawbox=x='500+mod(t*300,500)':y=200:w=20:h=8:color=0xffeeaa:t=fill[g];"
+         "[1:v]eq=saturation=0.6[cam];[g][cam]overlay=x=0:y=500:shortest=1[v]",
+         "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(video)],
+        check=True,
+    )
+    face = (110 / 1280, 590 / 720, 50 / 1280)  # nep-gezicht binnen de facecam
+
+    class Cam:
+        name = "nep"
+
+        def detect(self, frame):
+            return [(face[0], face[1], face[2], 0.9)]
+
+    frames = []
+    framing.sample_faces(video, 0, 4.5, detector=Cam(), collect=frames)
+    _, edges = facecam.analyse(frames)
+    box = facecam.find_facecam_by_contrast(frames, edges, face)
+    assert box is not None
+    x, y, w, h = box
+    assert x < 0.03 and abs(y - 500 / 720) < 0.04 and abs(w - 320 / 1280) < 0.04 and y + h > 0.97
+
+    monkeypatch.setattr(framing, "_detector", lambda: Cam())
+    fr = framing.choose_framing(video, 1280, 720, 0, 4.5, force_mode="split")
+    assert fr.mode == "split"
+
+
+def test_estimate_facecam_stays_in_frame():
+    x, y, w, h = framing.estimate_facecam((0.02, 0.98, 0.06), 1920, 1080)
+    assert x >= 0 and y >= 0 and x + w <= 1.0001 and y + h <= 1.0001 and w > 0.2
 
 
 def test_split_with_manual_box(tmp_path, sample_video, monkeypatch):

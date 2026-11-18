@@ -22,6 +22,7 @@ SAMPLES = 24
 ACTIVITY_THRESHOLD = 7.0  # grijswaarde-verschil (0-255) waaronder een pixel 'stil' is
 MAX_AREA = 0.45  # groter dan dit deel van het beeld = geen overlay
 Box = tuple[float, float, float, float]  # x, y, w, h als fracties van het frame
+_debug: dict = {}  # laatste tussenresultaten (alleen voor diagnose/tests)
 
 
 def _frames(video: Path, start: float, end: float, n: int = SAMPLES):
@@ -136,6 +137,82 @@ def find_facecam(activity, edges, face: tuple[float, float, float]) -> Box | Non
     if not (left <= fx <= right and top <= fy <= bottom):
         return None
     if not 0.5 <= bw / max(1, bh) <= 3.0 or bw * bh > MAX_AREA * W * H:
+        return None
+    return (left / W, top / H, (bw + 1) / W, (bh + 1) / H)
+
+
+def find_facecam_by_contrast(frames, edges, face: tuple[float, float, float]) -> Box | None:
+    """Tweede methode, voor rustige/donkere gameplay waar beweging niets zegt.
+
+    Op het gemiddelde beeld zoeken we vanaf het gezicht per zijde de lijn waar helderheid/textuur het
+    sterkst omslaat (rand van de overlay), eventueel versterkt door een vaste rechte rand. Vinden we
+    niets en ligt de beeldrand binnen bereik, dan loopt de facecam tot de beeldrand.
+    """
+    import cv2
+    import numpy as np
+
+    mean = np.mean([f.astype(np.float32) for f in frames], axis=0)
+    mean = cv2.GaussianBlur(mean, (3, 3), 0)
+    H, W = mean.shape
+    cx, cy, size = face
+    fx, fy = min(W - 1, int(cx * W)), min(H - 1, int(cy * H))
+    fw = max(4, int(size * W))
+    fh = int(fw * 1.25)
+    k = 4
+
+    def score(strip_a, strip_b, line):
+        if strip_a.size == 0 or strip_b.size == 0:
+            return 0.0
+        c = abs(float(strip_a.mean()) - float(strip_b.mean())) / 255 + abs(float(strip_a.std()) - float(strip_b.std())) / 128
+        e = float(np.mean(line.max(axis=line.ndim - 1) > 0.6)) if line.size else 0.0
+        return c + 0.4 * e
+
+    def side(direction: str) -> int:
+        vertical = direction in ("left", "right")
+        lo_band = (max(0, fy - fh), min(H, fy + fh)) if vertical else (max(0, fx - fw), min(W, fx + fw))
+        if direction == "left":
+            rng = range(fx - int(fw * 0.8), max(-1, fx - 7 * fw), -1)
+            edge_limit, default = 0, fx - 2 * fw
+        elif direction == "right":
+            rng = range(fx + int(fw * 0.8), min(W, fx + 7 * fw))
+            edge_limit, default = W - 1, fx + 2 * fw
+        elif direction == "top":
+            rng = range(fy - int(fh * 0.8), max(-1, fy - 6 * fh), -1)
+            edge_limit, default = 0, fy - int(1.2 * fh)
+        else:
+            rng = range(fy + int(fh * 0.8), min(H, fy + 6 * fh))
+            edge_limit, default = H - 1, fy + int(1.6 * fh)
+        a, b = lo_band
+        scored = []
+        for p in rng:
+            if p - k < 0 or p + k > (W if vertical else H):
+                continue
+            if vertical:
+                s_ = score(mean[a:b, p - k:p], mean[a:b, p:p + k], edges[a:b, max(0, p - 1):p + 2])
+            else:
+                s_ = score(mean[p - k:p, a:b], mean[p:p + k, a:b], edges[max(0, p - 1):p + 2, a:b].T)
+            scored.append((p, s_))
+        top_s = max((v for _, v in scored), default=0.0)
+        if top_s >= 0.22:
+            # randen in het webcambeeld zelf liggen dichter bij het gezicht dan de rand van de overlay:
+            # neem van de sterke lijnen de verste
+            strong = [p for p, v in scored if v >= max(0.22, 0.6 * top_s)]
+            pick = strong[-1]
+            # een smalle strook tot de beeldrand is vrijwel nooit gameplay: dan loopt de facecam tot de rand
+            if abs(pick - edge_limit) <= 1.5 * fw:
+                return edge_limit
+            return pick
+        reach_edge = (rng.stop <= 0) if rng.step < 0 else (rng.stop >= (W if vertical else H))
+        if reach_edge:
+            return edge_limit
+        return max(0, min((W if vertical else H) - 1, default))
+
+    left, right, top, bottom = side("left"), side("right"), side("top"), side("bottom")
+    _debug["contrast_sides"] = (left, right, top, bottom, fw)
+    bw, bh = right - left, bottom - top
+    if bw < 1.3 * fw or bh < 1.1 * fw or bw * bh > MAX_AREA * W * H:
+        return None
+    if not 0.5 <= bw / max(1, bh) <= 3.2:
         return None
     return (left / W, top / H, (bw + 1) / W, (bh + 1) / H)
 

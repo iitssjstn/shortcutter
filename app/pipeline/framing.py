@@ -26,6 +26,7 @@ class Framing:
     face_ratio: float = 0.0
     face_x: float | None = None  # (mediane) gezichtsmidden, als fractie van de breedte
     commands: str | None = None  # sendcmd-inhoud voor een meebewegende uitsnede
+    note: str | None = None  # bij Gesplitst: geschat | webcam-shot | geen facecam | geen gezicht
 
 
 # ---------------------------------------------------------------- detectoren
@@ -347,7 +348,18 @@ def blur_filter() -> str:
     )
 
 
+def estimate_facecam(face: tuple[float, float, float], src_w: int, src_h: int) -> tuple[float, float, float, float]:
+    """Ruwe schatting van een facecam (4:3) rond een klein gezicht, binnen het beeld."""
+    cx, cy, size = face
+    w_px = size * src_w * 4.0
+    h_px = min(src_h, w_px * 0.75)
+    x = min(max(0.0, cx * src_w - w_px / 2), src_w - w_px)
+    y = min(max(0.0, cy * src_h - h_px * 0.42), src_h - h_px)
+    return (max(0.0, x) / src_w, max(0.0, y) / src_h, min(1.0, w_px / src_w), min(1.0, h_px / src_h))
+
+
 MODES = ("auto", "crop", "blur", "split")
+BIG_FACE = 0.16  # gezicht breder dan dit deel van het beeld = geen facecam-overlay maar een webcam-shot
 
 
 def _tracked(src_w: int, src_h: int, track, cmd_file: str, ratio: float) -> Framing:
@@ -404,15 +416,30 @@ def choose_framing(
         face = main_face_box(samples or [], track) if hits else None
         game_x = 0.5 if face_x is None else min(1.0, max(0.0, face_x))
         cam = facecam_box
-        if cam is None and face is not None and frames and len(frames) >= 4:
-            activity, edges = facecam.analyse(frames[:: max(1, len(frames) // 40)])
+        note = None
+        if cam is None and face is not None and face[2] <= BIG_FACE and frames and len(frames) >= 4:
+            sub = frames[:: max(1, len(frames) // 40)]
+            activity, edges = facecam.analyse(sub)
             cam = facecam.find_facecam(activity, edges, face)
+            if cam is None and face[2] <= BIG_FACE:
+                cam = facecam.find_facecam_by_contrast(sub, edges, face)
+                if cam is None:  # laatste vangnet: kader rond het gezicht schatten
+                    cam = estimate_facecam(face, src_w, src_h)
+                note = "geschat"
         if cam is not None:
             fpos = face[:2] if face and cam[0] <= face[0] <= cam[0] + cam[2] and cam[1] <= face[1] <= cam[1] + cam[3] else None
-            return Framing("split", split_filter(src_w, src_h, cam, fpos, game_x), max(ratio, 0.0), cam[0] + cam[2] / 2)
-        if hits:  # wel een gezicht, maar geen facecam-overlay (bijv. een webcam-shot): vullen en volgen
-            return _tracked(src_w, src_h, track, cmd_file, ratio)
-        return Framing("crop", crop_filter(src_w, src_h, game_x), 0.0, game_x)
+            return Framing("split", split_filter(src_w, src_h, cam, fpos, game_x), max(ratio, 0.0), cam[0] + cam[2] / 2,
+                           note=note)
+        if hits and face is not None and face[2] > BIG_FACE:
+            # groot gezicht zonder overlay: een webcam-shot -> vullen en volgen
+            fr = _tracked(src_w, src_h, track, cmd_file, ratio)
+            fr.note = "webcam-shot"
+            return fr
+        if hits:
+            fr = _tracked(src_w, src_h, track, cmd_file, ratio)
+            fr.note = "geen facecam"
+            return fr
+        return Framing("crop", crop_filter(src_w, src_h, game_x), 0.0, game_x, note="geen gezicht")
     if hits and (mode == "crop" or ratio >= FACE_RATIO):
         return _tracked(src_w, src_h, track, cmd_file, ratio)
     if mode == "crop":
