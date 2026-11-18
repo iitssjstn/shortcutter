@@ -58,7 +58,7 @@ def test_editor_flow(project_factory, settings, sample_video, monkeypatch, admin
     db.close()
 
     page = admin_client.get(f"/clips/{cid}/edit")
-    assert page.status_code == 200 and 'id="le-stage"' in page.text and 'name="cap_text"' in page.text
+    assert page.status_code == 200 and 'id="ed-stage"' in page.text and 'name="cap_text"' in page.text
     n = page.text.count('name="cap_text"')
     texts = ["AANGEPASTE tekst"] + [""] * (n - 1)  # eerste regel wijzigen, rest verwijderen
 

@@ -119,181 +119,213 @@
     box.addEventListener("pointerup", function () { start = null; });
   }
 
-  // Clip-editor: indeling tekenen/verslepen met vaste verhouding, live voorbeeld met ondertitel
+  // Clip-editor (zoals bij Twitch): kaders verslepen/schalen op de bewegende video, live staand voorbeeld,
+  // schuifbalk tussen facecam en gameplay, tijdlijn met afspelen/geluid.
   function initClipEditor(form) {
-    var stage = document.getElementById("le-stage"), img = document.getElementById("le-img");
-    var canvas = document.getElementById("le-preview"), ctx = canvas.getContext("2d");
-    var modeSel = document.getElementById("layout-mode"), topIn = document.getElementById("le-top");
-    var out = document.getElementById("layout-json");
-    var SW = parseFloat(stage.getAttribute("data-src-w")) || 1920, SH = parseFloat(stage.getAttribute("data-src-h")) || 1080;
+    var stage = document.getElementById("ed-stage"), video = document.getElementById("ed-video");
+    var canvas = document.getElementById("ed-preview"), ctx = canvas.getContext("2d");
+    var out = document.getElementById("layout-json"), modeIn = document.getElementById("layout-mode");
+    var seek = document.getElementById("ed-seek"), timeEl = document.getElementById("ed-time");
+    var divider = document.getElementById("ed-divider"), wrap = document.getElementById("ed-preview-wrap");
     var clamp = function (v, a, b) { return Math.min(b, Math.max(a, v)); };
-    var st = { cam: null, game: null, rect: null, top: 0.35 };
+    var SW = 1920, SH = 1080, T0 = 0, T1 = 0;
+    if (stage) {
+      SW = parseFloat(stage.getAttribute("data-src-w")) || 1920; SH = parseFloat(stage.getAttribute("data-src-h")) || 1080;
+      T0 = parseFloat(stage.getAttribute("data-start")) || 0; T1 = parseFloat(stage.getAttribute("data-end")) || T0 + 30;
+    }
+    var st = { mode: modeIn.value || "auto", top: 0.35, cam: null, game: null, rect: null };
+    var auto = null;
     try {
-      var init = JSON.parse(out.value || "null");
-      if (init && init.type === "split") { st.cam = init.cam; st.game = init.game; st.top = init.top || 0.35; }
-      if (init && init.type === "crop") { st.rect = init.rect; }
-    } catch (e) { /* geen beginwaarde */ }
+      auto = JSON.parse(out.value || "null");
+      if (auto && auto.type === "split") { st.cam = auto.cam; st.game = auto.game; st.top = auto.top || 0.35; }
+      if (auto && auto.type === "crop") { st.rect = auto.rect; }
+    } catch (e) { auto = null; }
 
-    function aspect(k) {  // gewenste verhouding (breedte/hoogte in pixels) per vak
+    function A(k) {  // gewenste verhouding (breedte/hoogte, pixels) van het doelvak
       if (k === "cam") return 1080 / (1920 * st.top);
       if (k === "game") return 1080 / (1920 * (1 - st.top));
       return 1080 / 1920;
     }
-    function fit(r, k) {  // houd breedte, pas hoogte aan; krimp als het niet past
-      var A = aspect(k), w = r[2], h = w * SW / A / SH;
-      if (h > 1) { h = 1; w = h * SH * A / SW; }
-      if (w > 1) { w = 1; h = w * SW / A / SH; }
-      return [clamp(r[0], 0, 1 - w), clamp(r[1], 0, 1 - h), w, h];
+    function hFor(w, k) { return w * SW / (A(k) * SH); }
+    function fitAround(r, k) {  // zelfde midden en breedte, hoogte volgens verhouding; binnen het beeld
+      var cx = r[0] + r[2] / 2, cy = r[1] + r[3] / 2, w = r[2], h = hFor(w, k);
+      if (h > 1) { h = 1; w = h * SH * A(k) / SW; }
+      if (w > 1) { w = 1; h = hFor(w, k); }
+      return [clamp(cx - w / 2, 0, 1 - w), clamp(cy - h / 2, 0, 1 - h), w, h];
     }
-    function centered(k, wFrac) {
-      var A = aspect(k), h = 1, w = h * SH * A / SW;
-      if (wFrac && w > wFrac) { w = wFrac; h = w * SW / A / SH; }
-      if (w > 1) { w = 1; h = w * SW / A / SH; }
-      return [(1 - w) / 2, (1 - h) / 2, w, h];
-    }
+    function centered(k) { return fitAround([0, 0, 1, 1], k); }
     var fc = null;
-    try { fc = JSON.parse(stage.getAttribute("data-facecam") || "null"); } catch (e) { fc = null; }
-    if (!st.cam) st.cam = fc || [0.02, 0.02, 0.3, 0.3];
-    if (!st.game) st.game = centered("game");
-    if (!st.rect) st.rect = centered("rect");
-    topIn.value = Math.round(st.top * 100);
-    document.getElementById("le-top-val").textContent = topIn.value + "%";
+    try { fc = stage ? JSON.parse(stage.getAttribute("data-facecam") || "null") : null; } catch (e) { fc = null; }
+    st.cam = fitAround(st.cam || fc || [0.7, 0.65, 0.28, 0.3], "cam");
+    st.game = fitAround(st.game || centered("game"), "game");
+    st.rect = fitAround(st.rect || centered("rect"), "rect");
 
-    var targetKey = function () {
-      if (modeSel.value === "crop") return "rect";
-      var r = form.querySelector('input[name="le-target"]:checked');
-      return r ? r.value : "cam";
-    };
+    // ---- kaders
+    var boxes = stage ? { cam: stage.querySelector(".cam"), game: stage.querySelector(".game"), rect: stage.querySelector(".crop") } : {};
+    function placeBoxes() {
+      if (!stage) return;
+      Object.keys(boxes).forEach(function (k) {
+        var el = boxes[k], r = st[k];
+        var show = (st.mode === "split" && (k === "cam" || k === "game")) || (st.mode === "crop" && k === "rect");
+        el.hidden = !show;
+        el.style.left = r[0] * 100 + "%"; el.style.top = r[1] * 100 + "%";
+        el.style.width = r[2] * 100 + "%"; el.style.height = r[3] * 100 + "%";
+      });
+      stage.classList.toggle("is-auto", st.mode === "auto");
+    }
     function pos(e) {
       var b = stage.getBoundingClientRect();
       return { x: clamp((e.clientX - b.left) / b.width, 0, 1), y: clamp((e.clientY - b.top) / b.height, 0, 1) };
     }
     var drag = null;
-    stage.addEventListener("pointerdown", function (e) {
-      if (modeSel.value === "auto") return;
+    if (stage) stage.addEventListener("pointerdown", function (e) {
+      var box = e.target.closest(".ed-box");
+      if (!box || box.hidden) return;
       e.preventDefault();
-      var k = targetKey(), p = pos(e), r = st[k];
-      // klik op een ander vak in gesplitste modus: dat vak selecteren
-      if (modeSel.value === "split") {
-        ["cam", "game"].forEach(function (o) {
-          var q = st[o];
-          if (o !== k && p.x >= q[0] && p.x <= q[0] + q[2] && p.y >= q[1] && p.y <= q[1] + q[3] &&
-              !(p.x >= r[0] && p.x <= r[0] + r[2] && p.y >= r[1] && p.y <= r[1] + r[3])) {
-            k = o; r = st[o];
-            var radio = form.querySelector('input[name="le-target"][value="' + o + '"]');
-            if (radio) radio.checked = true;
-          }
-        });
+      var k = box.getAttribute("data-k"), r = st[k], p = pos(e), h = e.target.closest(".h");
+      Object.keys(boxes).forEach(function (o) { boxes[o].classList.toggle("front", o === k); });
+      if (h) {  // schalen vanaf een hoek; de tegenoverliggende hoek blijft staan
+        var west = h.classList.contains("nw") || h.classList.contains("sw");
+        var north = h.classList.contains("nw") || h.classList.contains("ne");
+        drag = { k: k, resize: true, ax: west ? r[0] + r[2] : r[0], ay: north ? r[1] + r[3] : r[1], west: west, north: north };
+      } else {
+        drag = { k: k, resize: false, dx: p.x - r[0], dy: p.y - r[1] };
       }
-      var inside = p.x >= r[0] && p.x <= r[0] + r[2] && p.y >= r[1] && p.y <= r[1] + r[3];
-      drag = inside ? { k: k, move: true, dx: p.x - r[0], dy: p.y - r[1] } : { k: k, move: false, sx: p.x, sy: p.y };
       stage.setPointerCapture(e.pointerId);
     });
-    stage.addEventListener("pointermove", function (e) {
+    if (stage) stage.addEventListener("pointermove", function (e) {
       if (!drag) return;
-      var p = pos(e), r = st[drag.k];
-      if (drag.move) {
-        st[drag.k] = [clamp(p.x - drag.dx, 0, 1 - r[2]), clamp(p.y - drag.dy, 0, 1 - r[3]), r[2], r[3]];
+      var p = pos(e), k = drag.k, r = st[k];
+      if (drag.resize) {
+        var w = Math.max(0.05, Math.abs(p.x - drag.ax));
+        var maxW = drag.west ? drag.ax : 1 - drag.ax;
+        var maxH = drag.north ? drag.ay : 1 - drag.ay;
+        w = Math.min(w, maxW);
+        var h = hFor(w, k);
+        if (h > maxH) { h = maxH; w = h * SH * A(k) / SW; }
+        st[k] = [drag.west ? drag.ax - w : drag.ax, drag.north ? drag.ay - h : drag.ay, w, h];
       } else {
-        var x = Math.min(p.x, drag.sx), y = Math.min(p.y, drag.sy);
-        var w = Math.max(0.03, Math.abs(p.x - drag.sx)), h = Math.max(0.03, Math.abs(p.y - drag.sy));
-        st[drag.k] = [clamp(x, 0, 1 - w), clamp(y, 0, 1 - h), w, h];
-        if (drag.k === "cam") matchTop();
+        st[k] = [clamp(p.x - drag.dx, 0, 1 - r[2]), clamp(p.y - drag.dy, 0, 1 - r[3]), r[2], r[3]];
       }
-      draw();
+      placeBoxes(); sync();
     });
-    stage.addEventListener("pointerup", function () { drag = null; });
+    if (stage) stage.addEventListener("pointerup", function () { drag = null; });
 
-    // facecam-hoogte zo kiezen dat de getekende facecam precies past (binnen 20-60%)
-    function matchTop() {
-      var c = st.cam, A = (c[2] * SW) / (c[3] * SH);
-      st.top = clamp(Math.round(1080 / (A * 1920) * 100) / 100, 0.2, 0.6);
-      topIn.value = Math.round(st.top * 100);
-      document.getElementById("le-top-val").textContent = topIn.value + "%";
+    // ---- schuifbalk tussen facecam en gameplay (in het voorbeeld)
+    var ddrag = false;
+    divider.addEventListener("pointerdown", function (e) { if (st.mode !== "split") return; e.preventDefault(); ddrag = true; divider.setPointerCapture(e.pointerId); });
+    divider.addEventListener("pointermove", function (e) {
+      if (!ddrag) return;
+      var b = wrap.getBoundingClientRect();
+      st.top = clamp(Math.round(((e.clientY - b.top) / b.height) * 100) / 100, 0.2, 0.6);
+      st.cam = fitAround(st.cam, "cam"); st.game = fitAround(st.game, "game");
+      placeBoxes(); sync();
+    });
+    divider.addEventListener("pointerup", function () { ddrag = false; });
+
+    // ---- modus
+    function setMode(m) {
+      st.mode = m; modeIn.value = m;
+      form.querySelectorAll(".ed-mode").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-mode") === m); });
+      placeBoxes(); sync();
     }
-    // deel van een vak dat echt gebruikt wordt (midden, in de verhouding van het doelvak) - zoals de server
-    function used(r, k) {
-      var A = aspect(k), pw = r[2] * SW, ph = r[3] * SH, x = r[0], y = r[1], w = r[2], h = r[3];
-      if (pw / ph > A) { var nw = ph * A / SW; x += (w - nw) / 2; w = nw; }
-      else { var nh = pw / A / SH; y += (h - nh) / 2; h = nh; }
-      return [x, y, w, h];
+    form.querySelectorAll(".ed-mode").forEach(function (b) {
+      b.addEventListener("click", function () { if (!stage && b.getAttribute("data-mode") !== "auto") return; setMode(b.getAttribute("data-mode")); });
+    });
+    function sync() {
+      if (st.mode === "split") out.value = JSON.stringify({ type: "split", cam: st.cam, game: st.game, top: st.top });
+      else if (st.mode === "crop") out.value = JSON.stringify({ type: "crop", rect: st.rect });
+      else out.value = "";
+      divider.hidden = st.mode !== "split";
+      divider.style.top = st.top * 100 + "%";
     }
 
-    topIn.addEventListener("input", function () {
-      st.top = parseInt(topIn.value, 10) / 100;
-      document.getElementById("le-top-val").textContent = topIn.value + "%";
-      draw();
-    });
-    modeSel.addEventListener("change", draw);
-    ["cap-pos", "cap-size", "cap-color", "cap-upper"].forEach(function (id) {
-      var el = document.getElementById(id); if (el) el.addEventListener("input", draw);
-      if (el) el.addEventListener("change", draw);
-    });
+    // ---- video en tijdlijn
+    function fmt(t) { t = Math.max(0, t); var m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ":" + (s < 10 ? "0" : "") + s; }
+    var dur = Math.max(0.1, T1 - T0);
+    if (video) {
+      video.addEventListener("loadedmetadata", function () { video.currentTime = T0; });
+      video.addEventListener("timeupdate", function () {
+        if (video.currentTime >= T1 || video.currentTime < T0 - 0.5) video.currentTime = T0;
+        var rel = clamp(video.currentTime - T0, 0, dur);
+        if (!seeking) seek.value = rel.toFixed(2);
+        timeEl.textContent = fmt(rel) + " / " + fmt(dur);
+      });
+      var seeking = false;
+      seek.addEventListener("input", function () { seeking = true; video.currentTime = T0 + parseFloat(seek.value); });
+      seek.addEventListener("change", function () { seeking = false; });
+      var play = document.getElementById("ed-play"), mute = document.getElementById("ed-mute");
+      play.addEventListener("click", function () { if (video.paused) video.play(); else video.pause(); });
+      video.addEventListener("play", function () { play.textContent = "❚❚"; play.setAttribute("aria-label", "Pauzeren"); });
+      video.addEventListener("pause", function () { play.textContent = "▶"; play.setAttribute("aria-label", "Afspelen"); });
+      mute.addEventListener("click", function () { video.muted = !video.muted; mute.textContent = video.muted ? "🔇" : "🔊"; });
+      form.addEventListener("click", function (e) {
+        var j = e.target.closest("[data-jump]");
+        if (j) { video.currentTime = T0 + parseFloat(j.getAttribute("data-jump")); }
+      });
+    } else {
+      seek.disabled = true;
+    }
+
+    // ---- ondertitel-opties
     form.addEventListener("click", function (e) {
       var b = e.target.closest("[data-cap-pos]");
       if (!b) return;
       var v = b.getAttribute("data-cap-pos");
-      if (v === "35" && modeSel.value === "split") v = String(Math.round(st.top * 100));
-      document.getElementById("cap-pos").value = v; draw();
+      if (v === "35" && st.mode === "split") v = String(Math.round(st.top * 100));
+      document.getElementById("cap-pos").value = v;
     });
-    form.addEventListener("input", function (e) { if (e.target.name === "cap_text") draw(); });
+    function currentCaption() {
+      var rel = video ? video.currentTime - T0 : 0, rows = form.querySelectorAll(".cap-row"), pick = null;
+      rows.forEach(function (r) {
+        var a = parseFloat(r.getAttribute("data-start")), b = parseFloat(r.getAttribute("data-end"));
+        if (rel >= a - 0.05 && rel <= b + 0.3) pick = r;
+      });
+      if (!pick && !video) pick = rows[0];
+      return pick ? pick.querySelector("input").value : "";
+    }
 
-    function place(el, r, k) {
-      el.style.left = r[0] * 100 + "%"; el.style.top = r[1] * 100 + "%";
-      el.style.width = r[2] * 100 + "%"; el.style.height = r[3] * 100 + "%";
-      var inner = el.querySelector(".le-used");
-      if (!inner) { inner = document.createElement("i"); inner.className = "le-used"; el.appendChild(inner); }
-      var u = used(r, k);
-      inner.style.left = ((u[0] - r[0]) / r[2]) * 100 + "%"; inner.style.top = ((u[1] - r[1]) / r[3]) * 100 + "%";
-      inner.style.width = (u[2] / r[2]) * 100 + "%"; inner.style.height = (u[3] / r[3]) * 100 + "%";
-    }
+    // ---- live voorbeeld
     function blit(r, dx, dy, dw, dh) {
-      if (!img || !img.naturalWidth) return;
-      var iw = img.naturalWidth, ih = img.naturalHeight;
-      ctx.drawImage(img, r[0] * iw, r[1] * ih, r[2] * iw, r[3] * ih, dx, dy, dw, dh);
+      if (!video || video.readyState < 2) return;
+      var vw = video.videoWidth, vh = video.videoHeight;
+      ctx.drawImage(video, r[0] * vw, r[1] * vh, r[2] * vw, r[3] * vh, dx, dy, dw, dh);
     }
-    function draw() {
-      var m = modeSel.value;
-      form.querySelectorAll(".le-tools").forEach(function (t) { t.style.display = m === "split" ? "" : "none"; });
-      form.querySelector(".le-help").style.display = m === "auto" ? "none" : "";
-      stage.querySelector(".cam").hidden = m !== "split";
-      stage.querySelector(".game").hidden = m !== "split";
-      stage.querySelector(".crop").hidden = m !== "crop";
-      stage.classList.toggle("is-auto", m === "auto");
-      place(stage.querySelector(".cam"), st.cam, "cam"); place(stage.querySelector(".game"), st.game, "game");
-      place(stage.querySelector(".crop"), st.rect, "rect");
+    function frame() {
       var W = canvas.width, H = canvas.height;
       ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
-      if (m === "split") {
+      if (st.mode === "split") {
         var th = Math.round(H * st.top);
-        blit(used(st.cam, "cam"), 0, 0, W, th); blit(used(st.game, "game"), 0, th, W, H - th);
-        out.value = JSON.stringify({ type: "split", cam: st.cam, game: st.game, top: st.top });
-      } else if (m === "crop") {
-        blit(used(st.rect, "rect"), 0, 0, W, H);
-        out.value = JSON.stringify({ type: "crop", rect: st.rect });
+        blit(st.cam, 0, 0, W, th); blit(st.game, 0, th, W, H - th);
+      } else if (st.mode === "crop") {
+        blit(st.rect, 0, 0, W, H);
+      } else if (auto && auto.type === "split") {
+        var t2 = Math.round(H * (auto.top || 0.35));
+        blit(auto.cam, 0, 0, W, t2); blit(auto.game, 0, t2, W, H - t2);
+      } else if (auto && auto.type === "crop") {
+        blit(auto.rect, 0, 0, W, H);
       } else {
-        ctx.fillStyle = "#9aa4b2"; ctx.font = "14px system-ui"; ctx.textAlign = "center";
-        ctx.fillText("Automatische indeling", W / 2, H / 2 - 30);
-        out.value = "";
+        ctx.fillStyle = "#9aa4b2"; ctx.font = "16px system-ui"; ctx.textAlign = "center";
+        ctx.fillText("Automatische indeling", W / 2, H / 2);
       }
-      // ondertitel-voorbeeld
-      var first = form.querySelector('input[name="cap_text"]');
-      var text = first ? first.value.split(/\s+/).slice(0, 3).join(" ") : "voorbeeld ondertitel";
-      if (document.getElementById("cap-upper").checked) text = text.toUpperCase();
-      var size = { S: 68, M: 86, L: 108 }[document.getElementById("cap-size").value] * W / 1080;
-      var y = H * parseInt(document.getElementById("cap-pos").value, 10) / 100;
-      var hi = { geel: "#FFE500", groen: "#5AE047", wit: "#FFFFFF" }[document.getElementById("cap-color").value] || "#FFE500";
-      ctx.font = "bold " + size + "px 'DejaVu Sans', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2, size / 7); ctx.strokeStyle = "#000";
-      var words = text.split(" "), widths = words.map(function (w) { return ctx.measureText(w + " ").width; });
-      var total = widths.reduce(function (a, b) { return a + b; }, 0), x = W / 2 - total / 2;
-      ctx.textAlign = "left";
-      words.forEach(function (w, i) {
-        ctx.strokeText(w, x, y); ctx.fillStyle = i === 0 ? hi : "#FFFFFF"; ctx.fillText(w, x, y); x += widths[i];
-      });
+      var on = form.querySelector('input[name="cap_enabled"]');
+      var text = on && on.checked ? currentCaption() : "";
+      if (text) {
+        if (document.getElementById("cap-upper").checked) text = text.toUpperCase();
+        var size = { S: 68, M: 86, L: 108 }[document.getElementById("cap-size").value] * W / 1080;
+        var y = H * parseInt(document.getElementById("cap-pos").value, 10) / 100;
+        var hi = { geel: "#FFE500", groen: "#5AE047", wit: "#FFFFFF" }[document.getElementById("cap-color").value] || "#FFE500";
+        ctx.font = "bold " + size + "px 'DejaVu Sans', sans-serif"; ctx.textBaseline = "middle";
+        ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2, size / 7); ctx.strokeStyle = "#000";
+        var words = text.split(/\s+/).slice(0, 4), widths = words.map(function (w) { return ctx.measureText(w + " ").width; });
+        var total = widths.reduce(function (a, b) { return a + b; }, 0), x = W / 2 - total / 2;
+        ctx.textAlign = "left";
+        words.forEach(function (w, i) { ctx.strokeText(w, x, y); ctx.fillStyle = i === 0 ? hi : "#FFFFFF"; ctx.fillText(w, x, y); x += widths[i]; });
+      }
+      requestAnimationFrame(frame);
     }
-    if (img) { if (img.complete) draw(); else img.addEventListener("load", draw); }
-    draw();
+    setMode(st.mode);
+    requestAnimationFrame(frame);
   }
 
   // Clips: uitklappen (soepel, duwt de rest omlaag); de clip uit de URL (#clip-ID) staat open
