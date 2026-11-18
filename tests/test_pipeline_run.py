@@ -276,8 +276,7 @@ def test_facecam_routes(project_factory, settings, sample_video, monkeypatch, ad
     pid = project_factory()
     _put_source(settings, pid, sample_video)
     run_job_once()
-    page = admin_client.get(f"/projects/{pid}").text
-    assert "Facecam aanwijzen" in page and f"/projects/{pid}/frame.jpg?t=" in page
+    assert "Facecam aanwijzen" not in admin_client.get(f"/projects/{pid}").text
     r = admin_client.get(f"/projects/{pid}/frame.jpg?t=1")
     assert r.status_code == 200 and r.content[:2] == b"\xff\xd8"
     # zonder rechthoek: nette melding
@@ -296,7 +295,6 @@ def test_facecam_routes(project_factory, settings, sample_video, monkeypatch, ad
     assert p.facecam_box == "0.0000,0.0000,0.3000,0.3000" and p.framing == "split"
     assert all(c.framing_mode == "split" and c.status == "ready" for c in p.clips)
     db.close()
-    assert 'data-box="0.00,0.00,30.00,30.00"' in admin_client.get(f"/projects/{pid}").text
     # wissen
     admin_client.post(f"/projects/{pid}/facecam", data={"clear": "1"})
     db = new_session()

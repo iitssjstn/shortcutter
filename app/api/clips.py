@@ -21,7 +21,7 @@ from app.estimation.service import clip_estimate
 from app.pipeline import captions, framing
 from app.pipeline.copywriting import normalize_hashtags
 from app.pipeline.errors import LLMError
-from app.pipeline.facecam import parse_box
+from app.pipeline.facecam import format_box, parse_box
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript, write_clips_json
 from app.pipeline.transcribe import all_words
 from app.worker import queue
@@ -215,8 +215,24 @@ async def save_editor(request: Request, cid: int, user: User = Depends(require_u
                 new.append(captions.retime(g, t))
         if changed or clip.captions_json:
             clip.captions_json = json.dumps(new, ensure_ascii=False)
+    others = []
+    if form.get("apply_all") in ("1", "on", "true") and clip.layout_json:
+        project = clip.project
+        layout = clip.layout
+        for other in project.clips:
+            if other.id != clip.id:
+                other.layout_json = clip.layout_json
+                other.framing_choice = layout["type"]
+                others.append(other)
+        project.framing = layout["type"]
+        if layout["type"] == "split":  # ook nieuwe/handmatige clips krijgen deze facecam
+            project.facecam_box = format_box(tuple(layout["cam"]))
     db.commit()
     msg = _queue_render(db, clip)
+    for other in others:
+        _queue_render(db, other)
+    if others:
+        msg = f"Indeling toegepast op alle {len(others) + 1} clips; ze worden opnieuw gerenderd."
     return redirect(f"/projects/{clip.project_id}#clip-{clip.id}", "Bewerkingen opgeslagen. " + msg)
 
 

@@ -203,6 +203,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ed-divider { position: absolute; left: 0; right: 0; height: 0; touch-action: none; }
 .ed-divider span { position: absolute; left: 50%; top: -12px; width: 64px; height: 24px; margin-left: -32px; border-radius: 12px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .5); cursor: ns-resize; }
 .ed-divider span::before { content: "••••"; position: absolute; inset: 0; display: grid; place-items: center; color: #555; font-size: 12px; letter-spacing: 2px; line-height: 24px; text-align: center; }
+.ed-apply-all { margin: .75rem 0 0; }
 .ed-modes { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .75rem; }
 .ed-mode svg { vertical-align: -3px; margin-right: .2rem; }
 .ed-mode { padding: .5rem .8rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }

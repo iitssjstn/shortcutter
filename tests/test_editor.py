@@ -115,3 +115,30 @@ def test_trim_resets_custom_captions(project_factory, settings, sample_video, mo
     db = new_session()
     assert db.get(Clip, cid).captions_json is None
     db.close()
+
+
+def test_apply_layout_to_all_clips(project_factory, settings, sample_video, monkeypatch, admin_client):
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+    pid = project_factory()
+    _put_source(settings, pid, sample_video)
+    run_job_once()
+    admin_client.post(f"/projects/{pid}/clips", data={"start": "0.5", "end": "3.5", "title": "Tweede"})
+    run_job_once()
+    db = new_session()
+    clips = db.scalars(select(Clip).where(Clip.project_id == pid).order_by(Clip.index)).all()
+    assert len(clips) >= 2
+    first = clips[0].id
+    db.close()
+    n = admin_client.get(f"/clips/{first}/edit").text.count('name="cap_text"')
+    r = admin_client.post(f"/clips/{first}/editor", data={
+        "layout_mode": "split", "layout_json": json.dumps(SPLIT), "apply_all": "1", "cap_text": [""] * n})
+    assert r.status_code == 303
+    while run_job_once():
+        pass
+    db = new_session()
+    from app.core.models import Project
+    p = db.get(Project, pid)
+    assert p.framing == "split" and p.facecam_box.startswith("0.0000,0.0000,0.3000")
+    for c in db.scalars(select(Clip).where(Clip.project_id == pid)):
+        assert c.layout["type"] == "split" and c.framing_mode == "split" and c.status == "ready"
+    db.close()
