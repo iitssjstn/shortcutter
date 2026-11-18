@@ -69,6 +69,9 @@
         <div class="field"><label for="llm_model_copy">LLM-model voor titels en beschrijvingen</label>
           <input id="llm_model_copy" name="llm_model_copy" type="text" value="{{ g.llm_model_copy }}" placeholder="{{ active_llm_model or 'geen actieve LLM-configuratie' }}">
           <div class="hint">Korte teksten schrijven: een snel en goedkoop model is genoeg.</div></div>
+        <input type="hidden" name="llm_vision_present" value="1">
+        <label class="row" style="font-weight:500;margin-bottom:.2rem"><input type="checkbox" name="llm_vision" value="1" {% if g.llm_vision != '0' %}checked{% endif %}> Beelden uit de clip meesturen bij titels en beschrijvingen</label>
+        <p class="hint" style="margin-top:0">De AI ziet dan 3 stilstaande beelden per clip, zodat de tekst klopt met wat er gebeurt (ook als er weinig gezegd wordt). Kost iets meer per verzoek; modellen zonder beeldherkenning vallen automatisch terug op alleen tekst.</p>
         <p class="hint" style="margin-top:-.4rem">
           Leeg = het model van de actieve configuratie bij <a href="/keys">API-sleutels</a>{% if active_llm_model %} (<code>{{ active_llm_model }}</code>){% endif %}.
           Meerdere modellen gescheiden door komma's = terugval: faalt het eerste (fout, overbelast), dan wordt het volgende geprobeerd,

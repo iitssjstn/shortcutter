@@ -66,3 +66,21 @@ def test_downloads_work_while_llm_api_fails(admin_client, settings, monkeypatch)
     assert admin_client.post(f"/clips/{cid}/posted", data={"platform": "TikTok", "url": ""}).status_code == 303
     assert admin_client.post(f"/clips/{cid}/views", data={"views": "1.234"}).status_code == 303
     assert admin_client.get("/stats").status_code == 200
+
+
+def test_remove_from_stats(admin_client, settings):
+    from app.core.db import new_session
+    from app.core.models import Clip
+
+    pid, (cid,) = make_project_with_clip(settings, "admin")
+    admin_client.post(f"/clips/{cid}/posted", data={"platform": "YouTube Shorts", "url": "https://youtube.com/shorts/x"})
+    admin_client.post(f"/clips/{cid}/views", data={"views": "500"})
+    page = admin_client.get("/stats").text
+    assert f'action="/clips/{cid}/unpost"' in page
+    r = admin_client.post(f"/clips/{cid}/unpost", data={"next": "stats"})
+    assert r.status_code == 303 and r.headers["location"] == "/stats"
+    db = new_session()
+    c = db.get(Clip, cid)
+    assert c.posted_at is None and c.actual_views is None and c.est_mid_at_post is None
+    db.close()
+    assert f'action="/clips/{cid}/unpost"' not in admin_client.get("/stats").text

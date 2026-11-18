@@ -45,7 +45,7 @@
   <h2>Geposte clips</h2>
   {% if posted %}
   <div class="table-wrap"><table>
-    <thead><tr><th>Clip</th><th>Platform</th><th class="num">Score</th><th class="num">Schatting (laag–hoog)</th><th class="num">Echt</th><th class="num">Echt / geschat</th></tr></thead>
+    <thead><tr><th>Clip</th><th>Platform</th><th class="num">Score</th><th class="num">Schatting (laag–hoog)</th><th class="num">Echt</th><th class="num">Echt / geschat</th><th></th></tr></thead>
     <tbody>
     {% for c in posted %}
       <tr>
@@ -55,6 +55,13 @@
         <td class="num">{{ fmt_views(c.est_low_at_post) }}–{{ fmt_views(c.est_high_at_post) }}</td>
         <td class="num">{{ fmt_views(c.actual_views) if c.actual_views is not none else '–' }}</td>
         <td class="num">{% if c.actual_views is not none and c.est_mid_at_post %}{{ '%.2f'|format(c.actual_views / c.est_mid_at_post) }}×{% else %}–{% endif %}</td>
+        <td class="num">
+          <form method="post" action="/clips/{{ c.id }}/unpost" class="inline" data-confirm="'{{ c.title|truncate(40) }}' uit de statistieken verwijderen? De clip zelf blijft bestaan; een video op YouTube verwijder je in YouTube Studio.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="next" value="stats">
+            <button class="btn btn-sm btn-danger" type="submit" title="Uit de statistieken verwijderen">Verwijderen</button>
+          </form>
+        </td>
       </tr>
     {% endfor %}
     </tbody>

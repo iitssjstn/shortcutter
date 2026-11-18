@@ -207,6 +207,7 @@ class Project(Base, JsonMixin):
     framing: Mapped[str] = mapped_column(String(16), default="auto")
     facecam_box: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "x,y,w,h" fracties, handmatig
     credit: Mapped[str | None] = mapped_column(String(200), nullable=True)  # naamsvermelding, bijv. twitch.tv/naam
+    source_meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # titel/beschrijving/kanaal/game van de bron
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -219,6 +220,10 @@ class Project(Base, JsonMixin):
     @property
     def warnings(self) -> list[str]:
         return self._load(self.warnings_json, [])
+
+    @property
+    def source_meta(self) -> dict:
+        return self._load(self.source_meta_json, {})
 
     def set_clip_warning(self, index: int, msg: str | None) -> None:
         """Eén waarschuwing per clip (wordt vervangen bij opnieuw renderen)."""

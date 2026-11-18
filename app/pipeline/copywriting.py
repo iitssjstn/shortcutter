@@ -74,25 +74,59 @@ def generate_post_texts(
     language: str = "en",
     meta: dict | None = None,
 ) -> dict[int, dict]:
-    """items: [{'id', 'text', 'title'}]. Geeft {id: {'title','description','hashtags'}} terug."""
+    """items: [{'id', 'text', 'title', optioneel 'before', 'context', 'frames', 'title_unreliable', 'duration'}].
+
+    Geeft {id: {'title','description','hashtags'}} terug. Met 'frames' (base64-JPEG) krijgt het model ook
+    beelden te zien; kan het model geen beelden lezen, dan wordt het automatisch zonder beelden opnieuw geprobeerd.
+    """
     from app.pipeline import pick
 
     if not items:
         return {}
-    blocks = "\n\n".join(f"CLIP {it['id']} (werktitel: {it.get('title') or '-'}):\n{it['text'][:2500]}" for it in items)
-    messages = [
-        {"role": "system", "content": "Je bent een social-media-copywriter voor YouTube Shorts, TikTok en Reels. "
-                                      "Antwoord uitsluitend met JSON."},
-        {"role": "user", "content": (
-            "Schrijf voor elke clip hieronder een posttekst. " + copy_rules(language) + "\n"
-            'Geef JSON: {"clips": [{"id": 1, "title": "...", "description": "...", "hashtags": ["#a", "#b"]}]}\n\n'
-            + blocks
-        )},
-    ]
+    system = ("Je bent een social-media-copywriter voor YouTube Shorts, TikTok en Reels. Je baseert je op wat er in de "
+              "clip echt gebeurt: wat je ziet op de beelden en wat er gezegd wordt. Bedenk niets wat niet te zien of te "
+              "horen is. Antwoord uitsluitend met JSON.")
+    intro = ("Schrijf voor elke clip hieronder een posttekst. " + copy_rules(language) + "\n"
+             "Gebruik vooral de beelden en de gesproken tekst. Titels die als ONBETROUWBAAR gemarkeerd zijn, zijn door "
+             "kijkers bedacht en vaak willekeurig: neem ze niet over. Noem de game alleen als die bekend is.\n"
+             'Geef JSON: {"clips": [{"id": 1, "title": "...", "description": "...", "hashtags": ["#a", "#b"]}]}')
+
+    def block(it: dict) -> str:
+        title_label = "werktitel (onbetrouwbaar)" if it.get("title_unreliable") else "werktitel"
+        lines = [f"CLIP {it['id']}" + (f" ({it['duration']} s)" if it.get("duration") else "")]
+        if it.get("context"):
+            lines.append(f"Context: {it['context']}")
+        lines.append(f"{title_label}: {it.get('title') or '-'}")
+        if it.get("before"):
+            lines.append(f"Vlak ervoor gezegd: {it['before'][:600]}")
+        lines.append(f"Gezegd in de clip: {it['text'][:2500]}")
+        if it.get("frames"):
+            lines.append(f"Hieronder {len(it['frames'])} beelden uit deze clip (begin, midden, eind).")
+        return "\n".join(lines)
+
+    def build(with_frames: bool) -> list[dict]:
+        if not with_frames:
+            text = intro + "\n\n" + "\n\n".join(block({**it, "frames": []}) for it in items)
+            return [{"role": "system", "content": system}, {"role": "user", "content": text}]
+        content: list[dict] = [{"type": "text", "text": intro}]
+        for it in items:
+            content.append({"type": "text", "text": "\n\n" + block(it)})
+            for f in it.get("frames") or []:
+                content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f}"}})
+        return [{"role": "system", "content": system}, {"role": "user", "content": content}]
+
+    has_frames = any(it.get("frames") for it in items)
+    messages = build(has_frames)
     kw = {"client": client, "meta": meta}
     if sleep is not None:
         kw["sleep"] = sleep
-    data = pick.chat_json(cfg, messages, **kw)
+    try:
+        data = pick.chat_json(cfg, messages, **kw)
+    except LLMError as exc:
+        if not has_frames or exc.kind in ("invalid", "no_credit"):
+            raise
+        # model kan (waarschijnlijk) geen beelden lezen: zonder beelden opnieuw
+        data = pick.chat_json(cfg, build(False), **kw)
     out: dict[int, dict] = {}
     known = {it["id"]: it for it in items}
     for row in (data.get("clips") if isinstance(data, dict) else None) or []:

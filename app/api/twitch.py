@@ -1,6 +1,8 @@
 """Twitch: kanalen beheren (eigen of met toestemming) en top-clips omzetten in shorts."""
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -163,6 +165,14 @@ async def import_clips(
             caption_style=us.caption_style,
             framing=framing,
             status="queued",
+            source_meta_json=json.dumps({
+                "platform": "twitch",
+                "original_title": clip["title"],
+                "title_unreliable": True,  # Twitch-cliptitels worden door kijkers bedacht
+                "streamer": clip.get("broadcaster_name") or ch.display_name,
+                "game": twitch.get_game_name(db, clip.get("game_id", "")),
+                "clip_creator": clip.get("creator"),
+            }, ensure_ascii=False),
         )
         db.add(project)
         db.commit()

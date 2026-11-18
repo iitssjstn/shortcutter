@@ -159,3 +159,88 @@ def test_project_shows_model_used(project_factory, settings, sample_video, monke
 
 
 from tests.test_pipeline_run import project_factory  # noqa: E402,F401  (fixture hergebruiken)
+
+
+def _twitch_project(project_factory, settings, sample_video, monkeypatch, admin_client):
+    import json as _json
+
+    from app.core.db import new_session
+    from app.core.models import Project
+    from app.pipeline import run as run_mod
+    from app.worker.runner import run_job_once
+    from tests.test_pipeline_run import _fake_transcribe, _put_source
+
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+    pid = project_factory()
+    db = new_session()
+    p = db.get(Project, pid)
+    p.source_type = "twitch"
+    p.source_meta_json = _json.dumps({"platform": "twitch", "original_title": "lol W", "title_unreliable": True,
+                                      "streamer": "Streamer", "game": "Rainbow Six Siege"})
+    db.commit()
+    db.close()
+    _put_source(settings, pid, sample_video)
+    run_job_once()
+    admin_client.post("/keys/llm", data={"name": "OR", "base_url": "https://openrouter.ai/api/v1", "model": "openai/gpt-4o-mini",
+                                         "api_key": "sk-or-v1-test000000000", "make_active": "1"})
+    return pid
+
+
+def test_posttext_sends_frames_and_context(project_factory, settings, sample_video, monkeypatch, admin_client):
+    pid = _twitch_project(project_factory, settings, sample_video, monkeypatch, admin_client)
+    seen = []
+
+    def fake_chat(cfg, messages, **kw):
+        seen.append(messages)
+        content = messages[1]["content"]
+        text = " ".join(p["text"] for p in content if p["type"] == "text") if isinstance(content, list) else content
+        ids = [int(x.split()[1]) for x in text.split("\n") if x.startswith("CLIP ")]
+        return {"clips": [{"id": i, "title": "Insane clutch with Blitz", "description": "Would you have pushed?",
+                           "hashtags": ["r6siege"]} for i in ids]}
+
+    monkeypatch.setattr(pick, "chat_json", fake_chat)
+    assert admin_client.post(f"/projects/{pid}/generate-texts").status_code == 303
+    content = seen[-1][1]["content"]
+    assert isinstance(content, list)
+    images = [p for p in content if p["type"] == "image_url"]
+    assert images and images[0]["image_url"]["url"].startswith("data:image/jpeg;base64,/9j/")
+    text = " ".join(p["text"] for p in content if p["type"] == "text")
+    assert "ONBETROUWBAAR" in text and "lol W" in text and "Rainbow Six Siege" in text and "Gezegd in de clip" in text
+
+
+def test_posttext_falls_back_to_text_only(project_factory, settings, sample_video, monkeypatch, admin_client):
+    from app.core.db import new_session
+    from app.core.models import Clip
+
+    pid = _twitch_project(project_factory, settings, sample_video, monkeypatch, admin_client)
+    calls = []
+
+    def picky(cfg, messages, **kw):
+        content = messages[1]["content"]
+        calls.append(type(content).__name__)
+        if isinstance(content, list):
+            raise LLMError("Model 'x' gaf fout 400 (bestaat het model wel?).", "model")
+        ids = [int(x.split()[1]) for x in content.split("\n") if x.startswith("CLIP ")]
+        return {"clips": [{"id": i, "title": "Tekst-only titel", "description": "d", "hashtags": []} for i in ids]}
+
+    monkeypatch.setattr(pick, "chat_json", picky)
+    admin_client.post(f"/projects/{pid}/generate-texts")
+    assert calls[:2] == ["list", "str"]
+    db = new_session()
+    assert db.scalars(select(Clip).where(Clip.project_id == pid)).first().title == "Tekst-only titel"
+    db.close()
+
+
+def test_vision_can_be_turned_off(project_factory, settings, sample_video, monkeypatch, admin_client):
+    pid = _twitch_project(project_factory, settings, sample_video, monkeypatch, admin_client)
+    admin_client.post("/settings/global", data={"llm_vision_present": "1", "max_active_per_user": "0",
+                                                "source_retention_days": "7", "project_retention_days": "0"})
+    seen = []
+
+    def fake_chat(cfg, messages, **kw):
+        seen.append(messages[1]["content"])
+        return {"clips": []}
+
+    monkeypatch.setattr(pick, "chat_json", fake_chat)
+    admin_client.post(f"/projects/{pid}/generate-texts")
+    assert seen and isinstance(seen[-1], str)

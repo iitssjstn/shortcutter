@@ -45,3 +45,19 @@ def thumbnail(video: Path, out: Path, at: float = 1.0, width: int = 480) -> bool
             return thumbnail(video, out, 0.0, width)
         return False
     return True
+
+
+def frames_b64(video: Path, times: list[float], width: int = 512) -> list[str]:
+    """Losse frames als base64-JPEG (voor een LLM met beeldherkenning). Mislukte frames worden overgeslagen."""
+    import base64
+
+    out = []
+    for t in times:
+        res = subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-ss", f"{max(0.0, t):.2f}", "-i", str(video), "-frames:v", "1",
+             "-vf", f"scale={width}:-2", "-q:v", "5", "-f", "image2", "-c:v", "mjpeg", "-"],
+            capture_output=True, timeout=60,
+        )
+        if res.returncode == 0 and res.stdout:
+            out.append(base64.b64encode(res.stdout).decode())
+    return out

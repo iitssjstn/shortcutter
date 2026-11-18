@@ -100,6 +100,8 @@ def download(url: str, out_dir: Path, cookies_file: Path | None = None) -> tuple
     meta = {
         "title": info.get("title") or "",
         "duration": info.get("duration"),
-        "uploader": info.get("uploader"),
+        "uploader": info.get("uploader") or info.get("channel"),
+        "description": (info.get("description") or "")[:1500],
+        "creator": info.get("creator"),
     }
     return candidates[0], meta

@@ -104,32 +104,16 @@ SPLIT_NOTES = {
 
 
 def _auto_post_text(db: Session, project: Project) -> None:
-    """Probeer meteen posttekst te laten schrijven voor clips zonder beschrijving. Faalt stil."""
-    from app.pipeline.copywriting import generate_post_texts
-    from app.pipeline.errors import LLMError
+    """Probeer meteen posttekst te laten schrijven voor clips zonder beschrijving. Faalt stil (met waarschuwing)."""
+    from app.pipeline.posttext import generate_for_clips
 
-    cfg = load_llm_config(db, "copy")
     todo = [c for c in project.clips if not c.description]
-    if cfg is None or not todo:
+    if not todo or load_llm_config(db, "copy") is None:
         return
-    transcript = load_transcript(project.id) or {"segments": []}
-    words = all_words(transcript)
-    from app.core.store import user_settings
-
-    lang = user_settings(db, project.owner_id).post_language or "en"
-    items = [{"id": c.id, "text": " ".join(w["word"] for w in words if c.start <= w["start"] < c.end) or c.title,
-              "title": c.title} for c in todo]
-    try:
-        result = generate_post_texts(cfg, items, language=lang)
-    except LLMError as exc:
-        project.add_warning(f"Posttekst genereren mislukt ({exc}); gebruik 'Posttekst voor alle clips'.")
+    _, err = generate_for_clips(db, project, todo)
+    if err:
+        project.add_warning(f"{err} Gebruik 'Posttekst voor alle clips' om het opnieuw te proberen.")
         db.commit()
-        return
-    for c in todo:
-        r = result.get(c.id)
-        if r:
-            c.title, c.description, c.hashtags = r["title"], r["description"], r["hashtags"]
-    db.commit()
 
 
 def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: dict) -> None:
@@ -240,6 +224,12 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
                 source, meta = download(project.source_url, project_input(project.id), None)
             if meta.get("title") and not project.title:
                 project.title = meta["title"][:300]
+            sm = project.source_meta
+            for k_src, k_dst in (("title", "original_title"), ("uploader", "uploader"), ("description", "description")):
+                if meta.get(k_src) and not sm.get(k_dst):
+                    sm[k_dst] = meta[k_src]
+            sm.setdefault("platform", project.source_type)
+            project.source_meta_json = json.dumps(sm, ensure_ascii=False)
         project.source_deleted = False
         info = _probe(project, source)
         if not project.title:

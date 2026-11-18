@@ -116,6 +116,8 @@ def save_global(
     whisper_model: str = Form(""),
     llm_model_pick: str = Form(""),
     llm_model_copy: str = Form(""),
+    llm_vision: str = Form(""),
+    llm_vision_present: str = Form(""),
     max_active_per_user: int = Form(0),
     source_retention_days: int = Form(7),
     project_retention_days: int = Form(0),
@@ -128,6 +130,8 @@ def save_global(
     set_global(db, "llm_model_pick", ", ".join(parse_models(llm_model_pick))[:400])
     set_global(db, "llm_model_copy", ", ".join(parse_models(llm_model_copy))[:400])
     set_global(db, "llm_model_override", "")
+    if llm_vision_present:
+        set_global(db, "llm_vision", "1" if llm_vision in ("1", "on", "true") else "0")
     set_global(db, "max_active_per_user", str(_clamp(max_active_per_user, 0, 1000)))
     set_global(db, "source_retention_days", str(_clamp(source_retention_days, 0, 3650)))
     set_global(db, "project_retention_days", str(_clamp(project_retention_days, 0, 3650)))

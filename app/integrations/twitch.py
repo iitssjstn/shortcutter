@@ -139,6 +139,7 @@ def _clip(d: dict) -> dict:
         "broadcaster_id": d.get("broadcaster_id", ""),
         "broadcaster_name": d.get("broadcaster_name", ""),
         "thumbnail": thumb if thumb.startswith("https://") else "",
+        "game_id": str(d.get("game_id") or ""),
     }
 
 
@@ -159,6 +160,25 @@ def get_clips(db: Session, broadcaster_id: str, period: str = "week", first: int
     clips = sorted((_clip(d) for d in data.get("data") or []), key=lambda c: c["views"], reverse=True)
     _cache[key] = (time.time() + CACHE_SECONDS, clips)
     return clips
+
+
+def get_game_name(db: Session, game_id: str) -> str | None:
+    if not game_id:
+        return None
+    key = ("game", game_id)
+    hit = _cache.get(key)
+    if hit and hit[0] > time.time():
+        return hit[1]  # type: ignore[return-value]
+    try:
+        creds = _creds_or_raise(db)
+        with _client_factory() as client:
+            data = helix(creds, "games", {"id": game_id}, client)
+    except TwitchError:
+        return None
+    items = data.get("data") or []
+    name = items[0].get("name") if items else None
+    _cache[key] = (time.time() + 86400, name)
+    return name
 
 
 def get_clip(db: Session, slug: str) -> dict | None:

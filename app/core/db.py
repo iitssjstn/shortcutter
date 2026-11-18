@@ -65,6 +65,7 @@ _ADDED_COLUMNS = [
     ("clips", "yt_error", "TEXT"),
     ("clips", "yt_video_id", "VARCHAR(40)"),
     ("clips", "yt_options_json", "TEXT"),
+    ("projects", "source_meta_json", "TEXT"),
     ("clips", "hashtags", "VARCHAR(300) NOT NULL DEFAULT ''"),
 ]
 

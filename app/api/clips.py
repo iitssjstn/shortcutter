@@ -12,15 +12,14 @@ from sqlalchemy.orm import Session
 from app.api.common import redirect, render
 from app.core.auth import require_user
 from app.core.db import get_db
-from app.core.keys import load_llm_config
 from app.core.models import Clip, User, utcnow
 from app.core.paths import find_source, project_output, safe_child
-from app.core.store import CAPTION_STYLES, FRAMING_MODES, get_clip_for, get_project_for, user_settings
+from app.core.store import CAPTION_STYLES, FRAMING_MODES, get_clip_for, get_project_for
 from app.estimation.estimator import viral_score
 from app.estimation.features import compute_features
 from app.estimation.service import clip_estimate
 from app.pipeline import captions, framing
-from app.pipeline.copywriting import generate_post_texts, normalize_hashtags
+from app.pipeline.copywriting import normalize_hashtags
 from app.pipeline.errors import LLMError
 from app.pipeline.facecam import parse_box
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript, write_clips_json
@@ -275,34 +274,12 @@ def retitle(
 
 
 def _generate(db: Session, clips: list[Clip]) -> tuple[int, str | None]:
-    """Laat de LLM posttekst schrijven. Geeft (aantal bijgewerkt, foutmelding) terug."""
-    cfg = load_llm_config(db, "copy")
-    if cfg is None:
-        return 0, "Er is geen LLM-sleutel ingesteld (zie API-sleutels)."
+    """Laat de LLM posttekst schrijven (met beelden en context). Geeft (aantal bijgewerkt, foutmelding)."""
+    from app.pipeline.posttext import generate_for_clips
+
     if not clips:
         return 0, "Er zijn geen clips."
-    transcript = load_transcript(clips[0].project_id) or {"segments": []}
-    words = all_words(transcript)
-    done = 0
-    for i in range(0, len(clips), 10):
-        batch = clips[i : i + 10]
-        items = []
-        for c in batch:
-            text = " ".join(w["word"] for w in words if c.start <= w["start"] < c.end) or c.hook or c.title
-            items.append({"id": c.id, "text": text, "title": c.title})
-        try:
-            lang = user_settings(db, clips[0].owner_id).post_language or "en"
-            result = generate_post_texts(cfg, items, language=lang)
-        except LLMError as exc:
-            db.commit()
-            return done, f"Posttekst genereren mislukt: {exc}"
-        for c in batch:
-            r = result.get(c.id)
-            if r:
-                c.title, c.description, c.hashtags = r["title"], r["description"], r["hashtags"]
-                done += 1
-    db.commit()
-    return done, None
+    return generate_for_clips(db, clips[0].project, clips)
 
 
 @router.post("/clips/{cid}/generate-text")
@@ -368,13 +345,16 @@ def mark_posted(
 
 
 @router.post("/clips/{cid}/unpost")
-def unpost(cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def unpost(cid: int, next: str = Form(""), user: User = Depends(require_user), db: Session = Depends(get_db)):
     clip = get_clip_for(db, user, cid)
     clip.posted_platform = clip.posted_url = None
     clip.posted_at = None
     clip.actual_views = None
     clip.est_mid_at_post = clip.est_low_at_post = clip.est_high_at_post = None
     db.commit()
+    if next == "stats":
+        return redirect("/stats", f"'{clip.title[:60]}' verwijderd uit de statistieken. De clip zelf (en een eventuele "
+                                  "video op YouTube) blijft bestaan.")
     return redirect(_back(clip), "Markering 'gepost' verwijderd.")
 
 
