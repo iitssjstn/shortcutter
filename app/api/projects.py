@@ -139,6 +139,9 @@ def _project_ctx(db: Session, user: User, project: Project) -> dict:
     )
     out_size = dir_size(project_output(project.id))
     in_size = dir_size(project_input(project.id))
+    from app.core.models import YoutubeAccount
+
+    yt_connected = db.scalar(select(YoutubeAccount.id).where(YoutubeAccount.user_id == project.owner_id)) is not None
     return {
         "project": project,
         "clips": clips,
@@ -150,6 +153,7 @@ def _project_ctx(db: Session, user: User, project: Project) -> dict:
         "segments": (transcript or {}).get("segments", []),
         "disk": {"output": out_size, "input": in_size},
         "baseline": user_settings(db, project.owner_id).channel_avg_views,
+        "yt_connected": yt_connected,
     }
 
 

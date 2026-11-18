@@ -35,7 +35,7 @@ LLM_PRESETS = [
     {"label": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "prefix": "sk-…"},
 ]
 PROVIDER_LABELS = {"llm": "LLM (OpenAI-compatibel)", "youtube": "YouTube Data API", "cookies": "yt-dlp cookies.txt",
-                   "twitch": "Twitch API"}
+                   "twitch": "Twitch API", "google_oauth": "Google OAuth (YouTube-upload)"}
 
 
 def public(c: Credential) -> dict:
@@ -92,6 +92,8 @@ def keys_page(request: Request, user: User = Depends(require_admin), db: Session
             "youtube": next((c for c in creds if c.provider == "youtube"), None),
             "cookies": next((c for c in creds if c.provider == "cookies"), None),
             "twitch": next((c for c in creds if c.provider == "twitch"), None),
+            "google": next((c for c in creds if c.provider == "google_oauth"), None),
+            "google_redirect": __import__("app.integrations.youtube_upload", fromlist=["x"]).redirect_uri(str(request.base_url)),
             "logs": logs,
             "default_base": DEFAULT_LLM_BASE,
             "default_model": DEFAULT_LLM_MODEL,
@@ -355,6 +357,8 @@ def test_key(request: Request, kid: int, user: User = Depends(require_admin), db
     cred = _get(db, kid)
     if cred.provider == "cookies":
         status, msg = "geldig", "cookies.txt is opgeslagen; yt-dlp gebruikt hem bij de volgende download."
+    elif cred.provider == "google_oauth":
+        status, msg = "geldig", "Opgeslagen. Test de koppeling door bij Mijn account je YouTube-kanaal te koppelen."
     elif cred.provider == "twitch":
         try:
             data = json.loads(crypto.decrypt_str(cred.encrypted_value))

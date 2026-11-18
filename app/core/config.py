@@ -23,6 +23,7 @@ class Settings:
     whisper_device: str = field(default_factory=lambda: os.environ.get("WHISPER_DEVICE", "cpu"))
     whisper_compute: str = field(default_factory=lambda: os.environ.get("WHISPER_COMPUTE", "int8"))
     whisper_threads: int = field(default_factory=lambda: int(os.environ.get("WHISPER_THREADS", "0") or 0))
+    public_url: str = field(default_factory=lambda: os.environ.get("PUBLIC_URL", "").strip().rstrip("/"))
     cookie_secure: bool = field(default_factory=lambda: _bool("COOKIE_SECURE", False))
     run_worker: bool = field(default_factory=lambda: _bool("RUN_WORKER", True))
     session_days: int = 14

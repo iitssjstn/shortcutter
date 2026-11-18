@@ -119,6 +119,21 @@ class Credential(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
+class YoutubeAccount(Base):
+    """Gekoppeld YouTube-kanaal van een gebruiker (tokens versleuteld)."""
+
+    __tablename__ = "youtube_accounts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    channel_id: Mapped[str] = mapped_column(String(64), default="")
+    channel_title: Mapped[str] = mapped_column(String(200), default="")
+    refresh_token_enc: Mapped[bytes] = mapped_column(default=b"")
+    access_token_enc: Mapped[bytes | None] = mapped_column(nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_upload_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class TwitchChannel(Base):
     """Twitch-kanaal waarvan een gebruiker clips mag gebruiken (eigen kanaal of met toestemming)."""
 
@@ -246,6 +261,10 @@ class Clip(Base, JsonMixin):
     auto_layout_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # laatst automatisch gekozen indeling
     captions_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # eigen ondertitelregels
     caption_opts_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # positie/grootte/kleur/hoofdletters
+    yt_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # queued | uploading | done | failed
+    yt_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    yt_video_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    yt_options_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # titel, beschrijving, privacy, publishAt
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)

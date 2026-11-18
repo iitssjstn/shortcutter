@@ -187,6 +187,26 @@ Hiervoor heeft de beheerder een gratis Twitch-app nodig: maak er een op `dev.twi
 > streamer, en voeg zelf iets toe (ondertitels, selectie, titel): zonder toestemming riskeer je claims of strikes, en
 > YouTube kan herplaatste content demonetiseren.
 
+## Uploaden naar YouTube
+
+Gebruikers kunnen hun eigen YouTube-kanaal koppelen (**Mijn account**) en clips direct uploaden of een selectie
+inplannen (bijv. elke dag om 18:00). Na een geslaagde upload wordt de clip automatisch als gepost gemarkeerd.
+
+Eenmalig door de beheerder (**API-sleutels → YouTube-upload**):
+
+1. In `console.cloud.google.com`: schakel **YouTube Data API v3** in.
+2. **OAuth-toestemmingsscherm**: type *Extern*, scopes `youtube.upload` en `youtube.readonly`, publicatiestatus
+   **In productie** (in testmodus verlopen koppelingen na 7 dagen; in productie zie je bij het koppelen een
+   waarschuwing "app niet geverifieerd", die je kunt doorklikken).
+3. **OAuth-client-ID** van het type *Webapplicatie* met de redirect-URI die Shortcutter toont
+   (`https://<jouw-domein>/youtube/callback`). Zet eventueel `PUBLIC_URL` in de compose als de app het domein niet
+   goed herkent.
+4. Vul client-ID en client-secret in bij API-sleutels.
+
+Beperkingen van Google: video's die vanuit een niet-geaudit API-project worden geüpload, zet YouTube op **privé**
+(ook ingeplande). Zet ze in YouTube Studio op openbaar, of vraag een audit aan bij Google. Het gratis quotum is
+10.000 eenheden per dag; een upload kost ±1.600, dus ±6 uploads per dag.
+
 ## Hoe de view-schatting werkt (en wat de beperkingen zijn)
 
 Views zijn niet te voorspellen. Shortcutter toont daarom altijd een **bereik** met het label

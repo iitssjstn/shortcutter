@@ -13,3 +13,4 @@ faster-whisper==1.2.1
 av==15.1.0
 # yt-dlp bewust met ondergrens: YouTube verandert vaak, elke image-build haalt de nieuwste versie.
 yt-dlp[default]>=2026.10.26
+tzdata>=2024.1

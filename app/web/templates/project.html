@@ -99,6 +99,34 @@
 <div class="card empty">Er zijn geen clips. Voeg hieronder handmatig een clip toe.</div>
 {% endif %}
 
+{% if clips and yt_connected %}
+<section class="card" style="margin-top:1rem" id="youtube">
+  <details>
+    <summary>YouTube: clips inplannen</summary>
+    <form method="post" action="/projects/{{ project.id }}/youtube-schedule" class="details-body">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <p class="hint" style="margin-top:0">De geselecteerde clips worden na elkaar geüpload en ingepland, met de titel en posttekst van de clip.
+        Zolang je API-project niet door Google is geaudit, zet YouTube ze op privé en publiceert hij ze niet zelf.</p>
+      <div class="row" style="align-items:flex-end">
+        <div><label for="yt-start">Eerste publicatie</label><input id="yt-start" name="start" type="datetime-local" required></div>
+        <div><label for="yt-int">Daarna elke</label>
+          <select id="yt-int" name="interval_hours" style="width:auto"><option value="24">dag</option><option value="12">12 uur</option><option value="48">2 dagen</option><option value="168">week</option></select></div>
+        <label class="row" style="font-weight:400;margin:0"><input type="checkbox" name="made_for_kids" value="1"> Gemaakt voor kinderen</label>
+      </div>
+      <div class="stack" style="margin:.6rem 0">
+        {% for item in clips %}{% set c = item.clip %}
+        <label class="row" style="font-weight:400;margin:0">
+          <input type="checkbox" name="clip_ids" value="{{ c.id }}" {% if not c.yt_video_id and c.status == 'ready' %}checked{% endif %} {% if c.status != 'ready' %}disabled{% endif %}>
+          #{{ c.index }} {{ c.title }} {% if c.yt_video_id %}<span class="badge badge-ok">al geüpload</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit">Inplannen</button>
+    </form>
+  </details>
+</section>
+{% endif %}
+
 {% if project.status not in ACTIVE_STATUSES %}
 <section class="card" style="margin-top:1rem" id="facecam">
   <details {% if project.framing == 'split' %}open{% endif %}>

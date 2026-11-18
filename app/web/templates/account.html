@@ -22,6 +22,22 @@
         <button class="btn" type="submit">Opslaan</button>
       </form>
     </section>
+    <section class="card" id="youtube">
+      <h2>YouTube-kanaal</h2>
+      {% if yt_account %}
+      <p>Gekoppeld: <strong>{{ yt_account.channel_title or yt_account.channel_id }}</strong><br>
+        <span class="muted" style="font-size:.85rem">sinds {{ yt_account.connected_at|dt }} · laatste upload {{ yt_account.last_upload_at|dt }}</span></p>
+      <form method="post" action="/youtube/disconnect" class="inline" data-confirm="YouTube-kanaal ontkoppelen?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-danger" type="submit">Ontkoppelen</button>
+      </form>
+      {% elif yt_configured %}
+      <p class="muted" style="font-size:.9rem">Koppel je kanaal om clips vanuit Shortcutter te uploaden of in te plannen. Je logt in bij Google; Shortcutter krijgt alleen toestemming om video's te uploaden en je kanaalnaam te lezen.</p>
+      <a class="btn btn-primary" href="/youtube/connect">YouTube-kanaal koppelen</a>
+      {% else %}
+      <p class="muted" style="font-size:.9rem">Uploaden naar YouTube is nog niet ingesteld. {% if user.is_admin %}<a href="/keys#google">Stel de Google-koppeling in</a>.{% else %}Vraag de beheerder om de Google-koppeling in te stellen.{% endif %}</p>
+      {% endif %}
+    </section>
     <section class="card">
       <h2>Sessies</h2>
       <div class="row">

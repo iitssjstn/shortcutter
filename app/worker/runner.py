@@ -34,6 +34,11 @@ def run_job_once() -> bool:
                     error = p.error_kind
             elif job.kind == "render_clip" and job.clip_id:
                 rerender_clip(db, job.clip_id)
+            elif job.kind == "upload" and job.clip_id:
+                from app.api.youtube import run_upload
+
+                if not run_upload(db, job.clip_id):
+                    error = "upload"
         except Exception as exc:  # vangnet: de worker mag nooit stoppen
             db.rollback()
             log.exception("Job %s faalde", job.id)

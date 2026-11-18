@@ -125,6 +125,36 @@
       </div>
     </details>
 
+    <details id="yt-{{ c.id }}" {% if c.yt_status in ('queued', 'uploading', 'failed') %}open{% endif %}>
+      <summary>YouTube {% if c.yt_status == 'done' %}· geüpload{% elif c.yt_status in ('queued', 'uploading') %}· bezig{% elif c.yt_status == 'failed' %}· mislukt{% endif %}</summary>
+      <div class="details-body stack">
+        {% if c.yt_status == 'done' and c.yt_video_id %}
+        <p style="margin:0"><a href="https://youtube.com/shorts/{{ c.yt_video_id }}" target="_blank" rel="noopener noreferrer">Bekijk op YouTube ↗</a></p>
+        {% elif c.yt_status in ('queued', 'uploading') %}
+        <p class="muted" style="margin:0">{{ 'Bezig met uploaden…' if c.yt_status == 'uploading' else 'In de wachtrij om te uploaden.' }}</p>
+        {% endif %}
+        {% if c.yt_error %}<div class="flash flash-{{ 'warn' if c.yt_status == 'done' else 'error' }}" style="margin:0;font-size:.85rem">{{ c.yt_error }}</div>{% endif %}
+        {% if yt_connected and c.yt_status not in ('queued', 'uploading') %}
+        <form method="post" action="/clips/{{ c.id }}/youtube">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="field"><label for="yt-title-{{ c.id }}">Titel</label><input id="yt-title-{{ c.id }}" name="title" type="text" maxlength="100" value="{{ c.title }}" required></div>
+          <div class="field"><label for="yt-desc-{{ c.id }}">Beschrijving</label><textarea id="yt-desc-{{ c.id }}" name="description" rows="3">{{ c.post_text }}</textarea></div>
+          <div class="field"><label for="yt-priv-{{ c.id }}">Zichtbaarheid</label>
+            <select id="yt-priv-{{ c.id }}" name="privacy">
+              <option value="private">Privé</option><option value="unlisted">Verborgen (unlisted)</option><option value="public">Openbaar</option>
+            </select></div>
+          <div class="field"><label for="yt-when-{{ c.id }}">Publiceren op <span class="muted" style="font-weight:400">(optioneel)</span></label>
+            <input id="yt-when-{{ c.id }}" name="publish_at" type="datetime-local">
+            <div class="hint">Met een tijd wordt de video eerst privé geüpload en op dat moment openbaar.</div></div>
+          <label class="row" style="font-weight:400;font-size:.85rem;margin-top:.3rem"><input type="checkbox" name="made_for_kids" value="1"> Gemaakt voor kinderen</label>
+          <button class="btn btn-sm btn-primary" type="submit" style="margin-top:.4rem">{{ 'Opnieuw uploaden' if c.yt_status == 'done' else 'Uploaden naar YouTube' }}</button>
+        </form>
+        {% elif not yt_connected %}
+        <p class="muted" style="margin:0;font-size:.85rem"><a href="/account#youtube">Koppel je YouTube-kanaal</a> om direct te uploaden.</p>
+        {% endif %}
+      </div>
+    </details>
+
     <details {% if c.posted_at and c.actual_views is none %}open{% endif %}>
       <summary>{{ 'Gepost · views invullen' if c.posted_at else 'Markeer als gepost' }}</summary>
       <div class="details-body stack">

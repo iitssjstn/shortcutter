@@ -17,8 +17,17 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 @router.get("/account")
-def account_page(request: Request, user: User = Depends(A.require_user)):
-    return render(request, "account.html", {"nav": "account"})
+def account_page(request: Request, user: User = Depends(A.require_user), db: Session = Depends(get_db)):
+    from sqlalchemy import select
+
+    from app.core.models import YoutubeAccount
+    from app.integrations import youtube_upload as yt
+
+    return render(request, "account.html", {
+        "nav": "account",
+        "yt_account": db.scalar(select(YoutubeAccount).where(YoutubeAccount.user_id == user.id)),
+        "yt_configured": yt.oauth_credential(db) is not None,
+    })
 
 
 @router.post("/account/password")

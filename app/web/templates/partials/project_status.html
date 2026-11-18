@@ -10,6 +10,6 @@
     {% if position %} · {{ position }}e in de wachtrij{% elif position == 0 %} · wordt nu verwerkt{% endif %}
   </div>
   {% else %}
-  <div class="muted">Clips worden (opnieuw) gerenderd… {% if position %}({{ position }}e in de wachtrij){% endif %}</div>
+  <div class="muted">Bezig met renderen of uploaden… {% if position %}({{ position }}e in de wachtrij){% endif %}</div>
   {% endif %}
 </div>

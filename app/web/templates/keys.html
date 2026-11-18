@@ -126,6 +126,32 @@
   </section>
 </div>
 
+<section class="card" id="google">
+  <h2>YouTube-upload (Google OAuth) <span class="badge">optioneel</span></h2>
+  <p class="muted" style="font-size:.9rem">Hiermee kunnen gebruikers hun eigen YouTube-kanaal koppelen en clips uploaden of inplannen.</p>
+  <ol class="muted" style="font-size:.88rem;padding-left:1.2rem">
+    <li>In <code>console.cloud.google.com</code> (hetzelfde project als je YouTube API-sleutel): schakel <strong>YouTube Data API v3</strong> in.</li>
+    <li><strong>OAuth-toestemmingsscherm</strong>: gebruikerstype <em>Extern</em>, voeg de scope <code>youtube.upload</code> en <code>youtube.readonly</code> toe en zet de publicatiestatus op <em>In productie</em> (in testmodus verlopen koppelingen na 7 dagen).</li>
+    <li><strong>Inloggegevens → OAuth-client-ID</strong> van het type <em>Webapplicatie</em>, met als geautoriseerde redirect-URI:<br>
+      <div class="copybox" style="margin:.3rem 0"><input id="g-redirect" type="text" readonly value="{{ google_redirect }}"><button class="btn btn-sm" type="button" data-copy="g-redirect">Kopiëren</button></div>
+      {% if not google_redirect.startswith('https://') %}<span class="badge badge-warn">Google vereist https: open deze pagina via je domein, of zet PUBLIC_URL in de compose.</span>{% endif %}</li>
+  </ol>
+  <p class="muted" style="font-size:.85rem">Let op: zolang Google je API-project niet heeft geaudit, zet YouTube geüploade video's op privé (en ±6 uploads per dag door het quotum).</p>
+  {% if google %}
+  <div class="row"><code>{{ google.mask }}</code><span class="muted" style="font-size:.85rem">toegevoegd {{ google.created_at|dt }}</span>
+    <form method="post" action="/keys/{{ google.id }}/delete" class="inline" data-confirm="Google-koppeling verwijderen? Gekoppelde kanalen werken dan niet meer.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+    </form></div>
+  {% endif %}
+  <form method="post" action="/keys/google-oauth" autocomplete="off" class="grid-2" style="margin-top:.6rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label for="g-id">Client-ID</label><input id="g-id" name="client_id" type="text" autocomplete="off" required placeholder="….apps.googleusercontent.com"></div>
+    <div class="field"><label for="g-secret">Client-secret</label><input id="g-secret" name="client_secret" type="password" autocomplete="new-password" required></div>
+    <div><button class="btn" type="submit">{{ 'Vervangen' if google else 'Opslaan' }}</button></div>
+  </form>
+</section>
+
 <section class="card" id="twitch">
   <h2>Twitch API <span class="badge">optioneel</span></h2>
   <p class="muted" style="font-size:.9rem">Nodig voor de pagina <a href="/twitch">Twitch</a> (top-clips van kanalen ophalen). Maak gratis een app aan op

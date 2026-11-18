@@ -24,6 +24,7 @@ services:
       # Handmatig forceren kan met: CT2_FORCE_CPU_ISA: GENERIC  (geen AVX), WHISPER_VAD: "false"
       # WHISPER_THREADS: "2"      # minder CPU-threads (0 = automatisch)
       COOKIE_SECURE: "false"      # "true" zodra de app achter HTTPS (reverse proxy) draait
+      # PUBLIC_URL: "https://shorts.jouwdomein.nl"  # nodig voor de YouTube-koppeling (redirect-URL bij Google)
       # FORWARDED_ALLOW_IPS: "172.18.0.1"  # IP van je reverse proxy, voor het juiste client-IP
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"]
