@@ -177,39 +177,50 @@
       var b = stage.getBoundingClientRect();
       return { x: clamp((e.clientX - b.left) / b.width, 0, 1), y: clamp((e.clientY - b.top) / b.height, 0, 1) };
     }
+    // ---- één actieve box die je over het beeld beweegt; grootte met de schuif
+    st.active = st.mode === "crop" ? "rect" : "cam";
+    var sizeIn = document.getElementById("ed-size"), sizeName = document.getElementById("ed-size-name");
+    var pick = document.getElementById("ed-pick"), sizebar = document.getElementById("ed-sizebar");
+    function maxW(k) { return Math.min(1, SH * A(k) / SW); }
+    function setActive(k) {
+      st.active = k;
+      Object.keys(boxes).forEach(function (o) { boxes[o].classList.toggle("active", o === k); });
+      if (pick) pick.querySelectorAll("[data-pick]").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-pick") === k); });
+      if (sizeIn) sizeIn.value = Math.round(st[k][2] / maxW(k) * 100);
+      if (sizeName) sizeName.textContent = { cam: "· facecam", game: "· gameplay", rect: "· uitsnede" }[k];
+    }
+    if (pick) pick.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-pick]"); if (b) setActive(b.getAttribute("data-pick"));
+    });
+    if (sizeIn) sizeIn.addEventListener("input", function () {
+      var k = st.active, r = st[k], w = Math.max(0.05, maxW(k) * parseInt(sizeIn.value, 10) / 100);
+      st[k] = fitAround([r[0] + r[2] / 2 - w / 2, r[1] + r[3] / 2 - w / 2, w, w], k);
+      placeBoxes(); sync();
+    });
     var drag = null;
+    function moveTo(k, x, y) {
+      var r = st[k];
+      st[k] = [clamp(x, 0, 1 - r[2]), clamp(y, 0, 1 - r[3]), r[2], r[3]];
+    }
     if (stage) stage.addEventListener("pointerdown", function (e) {
-      var box = e.target.closest(".ed-box");
-      if (!box || box.hidden) return;
+      if (st.mode === "auto") return;
       e.preventDefault();
-      var k = box.getAttribute("data-k"), r = st[k], p = pos(e), h = e.target.closest(".h");
-      Object.keys(boxes).forEach(function (o) { boxes[o].classList.toggle("front", o === k); });
-      if (h) {  // schalen vanaf een hoek; de tegenoverliggende hoek blijft staan
-        var west = h.classList.contains("nw") || h.classList.contains("sw");
-        var north = h.classList.contains("nw") || h.classList.contains("ne");
-        drag = { k: k, resize: true, ax: west ? r[0] + r[2] : r[0], ay: north ? r[1] + r[3] : r[1], west: west, north: north };
-      } else {
-        drag = { k: k, resize: false, dx: p.x - r[0], dy: p.y - r[1] };
-      }
+      var p = pos(e), box = e.target.closest(".ed-box");
+      if (box && !box.hidden) setActive(box.getAttribute("data-k"));
+      var k = st.active, r = st[k];
+      var inside = p.x >= r[0] && p.x <= r[0] + r[2] && p.y >= r[1] && p.y <= r[1] + r[3];
+      if (!inside) { moveTo(k, p.x - r[2] / 2, p.y - r[3] / 2); r = st[k]; placeBoxes(); sync(); }
+      drag = { k: k, dx: p.x - r[0], dy: p.y - r[1] };
       stage.setPointerCapture(e.pointerId);
     });
     if (stage) stage.addEventListener("pointermove", function (e) {
       if (!drag) return;
-      var p = pos(e), k = drag.k, r = st[k];
-      if (drag.resize) {
-        var w = Math.max(0.05, Math.abs(p.x - drag.ax));
-        var maxW = drag.west ? drag.ax : 1 - drag.ax;
-        var maxH = drag.north ? drag.ay : 1 - drag.ay;
-        w = Math.min(w, maxW);
-        var h = hFor(w, k);
-        if (h > maxH) { h = maxH; w = h * SH * A(k) / SW; }
-        st[k] = [drag.west ? drag.ax - w : drag.ax, drag.north ? drag.ay - h : drag.ay, w, h];
-      } else {
-        st[k] = [clamp(p.x - drag.dx, 0, 1 - r[2]), clamp(p.y - drag.dy, 0, 1 - r[3]), r[2], r[3]];
-      }
+      var p = pos(e);
+      moveTo(drag.k, p.x - drag.dx, p.y - drag.dy);
       placeBoxes(); sync();
     });
     if (stage) stage.addEventListener("pointerup", function () { drag = null; });
+    if (stage) stage.addEventListener("pointercancel", function () { drag = null; });
 
     // ---- schuifbalk tussen facecam en gameplay (in het voorbeeld)
     var ddrag = false;
@@ -219,13 +230,17 @@
       var b = wrap.getBoundingClientRect();
       st.top = clamp(Math.round(((e.clientY - b.top) / b.height) * 100) / 100, 0.2, 0.6);
       st.cam = fitAround(st.cam, "cam"); st.game = fitAround(st.game, "game");
-      placeBoxes(); sync();
+      setActive(st.active); placeBoxes(); sync();
     });
     divider.addEventListener("pointerup", function () { ddrag = false; });
 
     // ---- modus
     function setMode(m) {
       st.mode = m; modeIn.value = m;
+      if (pick) pick.hidden = m !== "split";
+      if (sizebar) sizebar.hidden = m === "auto";
+      if (m === "crop") setActive("rect");
+      else if (m === "split") setActive(st.active === "rect" ? "cam" : st.active);
       form.querySelectorAll(".ed-mode").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-mode") === m); });
       placeBoxes(); sync();
     }

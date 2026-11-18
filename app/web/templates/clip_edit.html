@@ -17,16 +17,24 @@
   <section class="card ed-card">
     <div class="ed-panes">
       <div class="ed-land">
-        <div class="ed-label">Liggende versie <span class="muted">· sleep een kader om het te verplaatsen, sleep een hoek om het groter of kleiner te maken</span></div>
+        <div class="ed-label">Liggende versie <span class="muted">· sleep de box, of klik op het beeld om hem daarheen te verplaatsen</span></div>
         {% if has_source %}
+        <div class="ed-pick" id="ed-pick">
+          <button type="button" class="ed-pick-btn cam" data-pick="cam">Facecam</button>
+          <button type="button" class="ed-pick-btn game" data-pick="game">Gameplay</button>
+        </div>
         <div class="ed-stage" id="ed-stage"
              data-src-w="{{ src_w }}" data-src-h="{{ src_h }}" data-facecam="{{ facecam_json }}"
              data-start="{{ clip.start }}" data-end="{{ clip.end }}">
           <video id="ed-video" src="/projects/{{ project.id }}/source#t={{ clip.start }}" preload="auto" muted playsinline></video>
-          <div class="ed-box cam" data-k="cam"><span class="ed-tag">facecam</span><i class="h nw"></i><i class="h ne"></i><i class="h sw"></i><i class="h se"></i></div>
-          <div class="ed-box game" data-k="game"><span class="ed-tag">gameplay</span><i class="h nw"></i><i class="h ne"></i><i class="h sw"></i><i class="h se"></i></div>
-          <div class="ed-box crop" data-k="rect"><span class="ed-tag">uitsnede</span><i class="h nw"></i><i class="h ne"></i><i class="h sw"></i><i class="h se"></i></div>
+          <div class="ed-box cam" data-k="cam"><span class="ed-tag">facecam</span></div>
+          <div class="ed-box game" data-k="game"><span class="ed-tag">gameplay</span></div>
+          <div class="ed-box crop" data-k="rect"><span class="ed-tag">uitsnede</span></div>
           <div class="ed-auto-note">Automatische indeling. Kies <strong>Vol</strong> of <strong>Gestapeld</strong> om het zelf aan te passen.</div>
+        </div>
+        <div class="ed-sizebar" id="ed-sizebar">
+          <label for="ed-size">Grootte <span class="muted" id="ed-size-name"></span></label>
+          <input type="range" id="ed-size" min="10" max="100" step="1" value="50">
         </div>
         {% else %}
         <div class="flash flash-warn">Het bronbestand is niet (meer) beschikbaar. Upload het opnieuw op de projectpagina om de indeling aan te passen; de ondertitels kun je hieronder wel aanpassen.</div>

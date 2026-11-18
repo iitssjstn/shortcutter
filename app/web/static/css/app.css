@@ -180,7 +180,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ed-stage { position: relative; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; touch-action: none; user-select: none; }
 .ed-stage video { width: 100%; display: block; pointer-events: none; }
 .ed-box { position: absolute; border: 2px solid; box-sizing: border-box; cursor: move; }
-.ed-box.front { z-index: 2; }
+.ed-box.active { z-index: 2; border-width: 3px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .25); }
+.ed-box:not(.active) { opacity: .75; }
+.ed-pick { display: grid; grid-template-columns: repeat(2, minmax(120px, max-content)); gap: .5rem; margin-bottom: .6rem; }
+.ed-pick-btn { padding: .45rem .9rem; border-radius: 999px; border: 2px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.ed-pick-btn.cam.on { border-color: #ec4899; color: #ec4899; }
+.ed-pick-btn.game.on { border-color: #22d3ee; color: #22d3ee; }
+.ed-sizebar { display: grid; grid-template-columns: auto 1fr; gap: .8rem; align-items: center; margin-top: .7rem; }
+.ed-sizebar label { margin: 0; white-space: nowrap; }
+.ed-sizebar input { width: 100%; accent-color: var(--accent); }
 .ed-box.cam { border-color: #ec4899; background: rgba(236, 72, 153, .10); }
 .ed-box.game, .ed-box.crop { border-color: #22d3ee; background: rgba(34, 211, 238, .08); }
 .ed-tag { position: absolute; left: 6px; top: 6px; font: 600 11px/1.2 system-ui, sans-serif; color: #fff; background: rgba(0, 0, 0, .55); padding: 2px 5px; border-radius: 4px; pointer-events: none; }
