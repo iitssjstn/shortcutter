@@ -25,7 +25,7 @@
     var boxes = document.querySelectorAll(".clip-check");
     var ids = [];
     boxes.forEach(function (b) {
-      var card = b.closest(".clip");
+      var card = b.closest(".clip-row") || b.closest(".clip");
       if (card) card.classList.toggle("selected", b.checked);
       if (b.checked) ids.push(b.value);
     });
@@ -296,7 +296,29 @@
     draw();
   }
 
+  // Clips: uitklappen (soepel, duwt de rest omlaag); de clip uit de URL (#clip-ID) staat open
+  function setOpen(row, open) {
+    row.classList.toggle("open", open);
+    var btn = row.querySelector(".clip-toggle");
+    if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) row.querySelectorAll("video").forEach(function (v) { v.pause(); });
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest(".clip-toggle");
+    if (!t) return;
+    var row = t.closest(".clip-row");
+    setOpen(row, !row.classList.contains("open"));
+  });
+
   document.addEventListener("DOMContentLoaded", function () {
+    if (location.hash && /^#clip-\d+$/.test(location.hash)) {
+      var row = document.querySelector(location.hash);
+      if (row && row.classList.contains("clip-row")) {
+        row.style.transition = "none";
+        setOpen(row, true);
+        setTimeout(function () { row.scrollIntoView({ block: "start" }); }, 50);
+      }
+    }
     updateSelection();
     document.querySelectorAll(".facecam-picker").forEach(initFacecamPicker);
     var ed = document.getElementById("clip-editor");

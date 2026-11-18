@@ -92,7 +92,7 @@
   Views zijn een <strong>schatting</strong> (laag – hoog) t.o.v. het kanaalgemiddelde van {{ fmt_views(baseline) }}.
   {% if calibration.method == 'standaard' %}Nog niet gekalibreerd: vul echte views in bij geposte clips.{% else %}Gekalibreerd met {{ calibration.n }} geposte clips ({{ calibration.method }}).{% endif %}
 </p>
-<div class="clip-grid">
+<div class="clip-list">
   {% for item in clips %}{% include "partials/clip_card.html" %}{% endfor %}
 </div>
 {% elif project.status == 'done' %}

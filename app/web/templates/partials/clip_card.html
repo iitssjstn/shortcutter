@@ -1,187 +1,224 @@
 {% set c = item.clip %}{% set est = item.est %}
-<article class="clip" id="clip-{{ c.id }}">
-  <div class="clip-video">
-    <label class="clip-select"><input type="checkbox" class="clip-check" value="{{ c.id }}"> #{{ c.index }}</label>
-    {% if c.status not in ('pending', 'rendering') and (c.file_path or c.raw_path) %}
-      <video src="/clips/{{ c.id }}/video" controls preload="none" playsinline {% if c.thumb_path %}poster="/clips/{{ c.id }}/thumb"{% endif %}></video>
-    {% else %}
-      <div class="placeholder">
-        {% if c.status == 'failed' %}<div><strong>Renderen mislukt</strong><br>{{ c.render_error or '' }}</div>
-        {% elif c.status == 'rendering' %}Bezig met renderen…
-        {% else %}Wacht op renderen…{% endif %}
-      </div>
-    {% endif %}
+<article class="clip-row" id="clip-{{ c.id }}">
+  <div class="clip-head">
+    <label class="clip-check-wrap" title="Selecteren voor download"><input type="checkbox" class="clip-check" value="{{ c.id }}" aria-label="Clip {{ c.index }} selecteren"></label>
+    <button type="button" class="clip-toggle" aria-expanded="false" aria-controls="clip-panel-{{ c.id }}">
+      <span class="clip-thumb">
+        {% if c.thumb_path and c.status not in ('pending', 'rendering') %}<img src="/clips/{{ c.id }}/thumb" alt="" loading="lazy">{% endif %}
+        <span class="clip-idx">#{{ c.index }}</span>
+      </span>
+      <span class="clip-main">
+        <span class="clip-title">{{ c.title }}</span>
+        <span class="clip-meta">
+          {{ c.start|ts }} – {{ c.end|ts }} · {{ '%.0f'|format(c.duration) }} s
+          {% if c.framing_mode %} · {{ {'crop': 'gevuld', 'blur': 'passend', 'vertical': 'staand', 'split': 'gesplitst'}.get(c.framing_mode, c.framing_mode) }}{% endif %}
+          {% if c.source == 'heuristiek' %} · heuristiek{% elif c.source == 'handmatig' %} · handmatig{% endif %}
+        </span>
+      </span>
+      <span class="clip-num"><span class="k">Score</span><span class="v">{{ c.viral_score }}</span></span>
+      <span class="clip-num"><span class="k">Views (schatting)</span><span class="v">{{ fmt_views(est.low) }}–{{ fmt_views(est.high) }}</span></span>
+      <span class="clip-state">
+        {% if c.status == 'failed' %}<span class="badge badge-error">render mislukt</span>
+        {% elif c.status in ('pending', 'rendering') %}<span class="badge badge-accent">renderen</span>
+        {% elif c.yt_status == 'done' %}<span class="badge badge-ok">op YouTube</span>
+        {% elif c.yt_status in ('queued', 'uploading') %}<span class="badge badge-accent">uploaden</span>
+        {% elif c.posted_at %}<span class="badge badge-ok">gepost</span>
+        {% else %}<span class="badge">klaar</span>{% endif %}
+      </span>
+      <span class="clip-chevron" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="clip-body">
-    <div class="clip-title">{{ c.title }}</div>
-    {% if c.hook %}<div class="clip-hook">“{{ c.hook }}”</div>{% endif %}
-    <div class="row">
-      <span class="badge">{{ c.start|ts }} – {{ c.end|ts }} ({{ '%.0f'|format(c.duration) }} s)</span>
-      {% if c.source == 'heuristiek' %}<span class="badge badge-warn">heuristiek</span>{% elif c.source == 'handmatig' %}<span class="badge">handmatig</span>{% endif %}
-      {% if c.framing_mode %}<span class="badge">{{ {'crop': 'gevuld', 'blur': 'passend', 'vertical': 'staand', 'split': 'gesplitst'}.get(c.framing_mode, c.framing_mode) }}</span>{% endif %}
-      {% if c.category and c.category != 'overig' %}<span class="badge">{{ c.category }}</span>{% endif %}
-      {% if c.status == 'failed' %}<span class="badge badge-error">render mislukt</span>{% elif c.status in ('pending', 'rendering') %}<span class="badge badge-accent">renderen</span>{% endif %}
-      {% if c.posted_at %}<span class="badge badge-ok">gepost: {{ c.posted_platform }}</span>{% endif %}
-    </div>
-    {% if c.status == 'failed' and c.raw_path %}<div class="flash flash-warn" style="margin:0;font-size:.85rem">{{ c.render_error }}</div>{% endif %}
-    <div class="stats-row">
-      <div class="stat"><div class="k">Viral score</div><div class="v score">{{ c.viral_score }}<span class="muted" style="font-size:.8rem">/10</span></div></div>
-      <div class="stat estimate" title="Schatting: views zijn niet echt te voorspellen">
-        <div class="k">Geschatte views</div>
-        <div class="v">{{ fmt_views(est.low) }} – {{ fmt_views(est.high) }}</div>
-        <div class="muted" style="font-size:.75rem">midden {{ fmt_views(est.mid) }} · schatting</div>
-      </div>
-    </div>
-    {% if c.actual_views is not none %}
-    <div class="stat"><div class="k">Echte views</div><div class="v">{{ fmt_views(c.actual_views) }}
-      {% if c.est_mid_at_post %}<span class="muted" style="font-size:.8rem;font-weight:400">(geschat bij posten: {{ fmt_views(c.est_mid_at_post) }})</span>{% endif %}</div></div>
-    {% endif %}
 
-    <div class="post-copy">
-      <div class="post-row"><label for="ptitle-{{ c.id }}">Titel</label><button class="btn btn-sm" type="button" data-copy="ptitle-{{ c.id }}">Kopieer</button></div>
-      <textarea id="ptitle-{{ c.id }}" class="post-field" rows="2" readonly>{{ c.title }}</textarea>
-      <div class="post-row"><label for="ptext-{{ c.id }}">Beschrijving</label><button class="btn btn-sm" type="button" data-copy="ptext-{{ c.id }}">Kopieer</button></div>
-      <textarea id="ptext-{{ c.id }}" class="post-field" rows="4" readonly>{{ c.post_text }}</textarea>
-      <form method="post" action="/clips/{{ c.id }}/generate-text">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn btn-sm btn-block" type="submit">{{ '↻ Posttekst opnieuw genereren' if c.description else '✨ Posttekst genereren met AI' }}</button>
-      </form>
-    </div>
-
-    <div class="clip-actions">
-      {% if c.file_path or c.raw_path %}<a class="btn btn-sm btn-primary" href="/clips/{{ c.id }}/download">Download mp4</a>{% endif %}
-      <a class="btn btn-sm" href="/clips/{{ c.id }}/edit">✎ Indeling &amp; ondertitels</a>
-      {% if c.status in ('failed',) or not c.file_path %}
-      <form method="post" action="/clips/{{ c.id }}/rerender" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn btn-sm" type="submit">Opnieuw renderen</button>
-      </form>
-      {% endif %}
-    </div>
-
-    <details>
-      <summary>Meer downloads</summary>
-      <div class="details-body clip-actions">
-        {% if c.raw_path %}<a class="btn btn-sm" href="/clips/{{ c.id }}/download-raw">Zonder ondertitels</a>{% endif %}
-        <a class="btn btn-sm" href="/clips/{{ c.id }}/subtitles.srt">Ondertitels .srt</a>
-        <a class="btn btn-sm" href="/clips/{{ c.id }}/subtitles.ass">Ondertitels .ass</a>
-      </div>
-    </details>
-
-    <details>
-      <summary>Bewerken</summary>
-      <div class="details-body stack">
-        <form method="post" action="/clips/{{ c.id }}/retitle">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <div class="field"><label for="title-{{ c.id }}">Titel</label><input id="title-{{ c.id }}" name="title" type="text" value="{{ c.title }}" maxlength="300" required></div>
-          <div class="field"><label for="desc-{{ c.id }}">Beschrijving</label><textarea id="desc-{{ c.id }}" name="description" rows="2">{{ c.description }}</textarea></div>
-          <div class="field"><label for="tags-{{ c.id }}">Hashtags</label><input id="tags-{{ c.id }}" name="hashtags" type="text" value="{{ c.hashtags }}" placeholder="#shorts"></div>
-          <div class="field"><label for="hook-{{ c.id }}">Hook (openingszin)</label><textarea id="hook-{{ c.id }}" name="hook" rows="2">{{ c.hook }}</textarea></div>
-          <button class="btn btn-sm" type="submit">Tekst opslaan</button>
-        </form>
-        <form method="post" action="/clips/{{ c.id }}/trim">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <div class="row" style="align-items:flex-end">
-            <div style="flex:1"><label for="start-{{ c.id }}">Start (s)</label><input id="start-{{ c.id }}" name="start" type="text" inputmode="decimal" value="{{ c.start }}"></div>
-            <div style="flex:1"><label for="end-{{ c.id }}">Einde (s)</label><input id="end-{{ c.id }}" name="end" type="text" inputmode="decimal" value="{{ c.end }}"></div>
-          </div>
-          <button class="btn btn-sm" type="submit" style="margin-top:.5rem">Trimmen en opnieuw renderen</button>
-        </form>
-        <form method="post" action="/clips/{{ c.id }}/framing">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <label for="mode-{{ c.id }}">Beeldvulling</label>
-          <select id="mode-{{ c.id }}" name="mode">
-            <option value="project" {% if not c.framing_choice %}selected{% endif %}>Zoals het project</option>
-            {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if c.framing_choice == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
-          </select>
-          <label for="pos-{{ c.id }}" style="margin-top:.5rem">Positie bij "Vullen" of gameplay bij "Gesplitst" <span class="muted" style="font-weight:400">(links ↔ rechts)</span></label>
-          <input id="pos-{{ c.id }}" name="position" type="range" min="0" max="100" step="5" value="{{ ((c.crop_x if c.crop_x is not none else 0.5) * 100)|round|int }}" style="width:100%">
-          <button class="btn btn-sm" type="submit" style="margin-top:.4rem">Toepassen en opnieuw renderen</button>
-        </form>
-        <div class="row">
-          <form method="post" action="/clips/{{ c.id }}/captions" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="enabled" value="{{ '0' if c.captions_enabled else '1' }}">
-            <button class="btn btn-sm" type="submit">Ondertitels {{ 'uit' if c.captions_enabled else 'aan' }}zetten</button>
-          </form>
-          <form method="post" action="/clips/{{ c.id }}/rerender" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn btn-sm" type="submit">Opnieuw renderen</button>
-          </form>
-          <form method="post" action="/clips/{{ c.id }}/delete" class="inline" data-confirm="Deze clip verwijderen?">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
-          </form>
+  <div class="clip-panel" id="clip-panel-{{ c.id }}">
+    <div class="clip-panel-inner">
+      <div class="clip-panel-grid">
+        <div class="clip-video">
+          {% if c.status not in ('pending', 'rendering') and (c.file_path or c.raw_path) %}
+            <video src="/clips/{{ c.id }}/video" controls preload="none" playsinline {% if c.thumb_path %}poster="/clips/{{ c.id }}/thumb"{% endif %}></video>
+          {% else %}
+            <div class="placeholder">
+              {% if c.status == 'failed' %}<div><strong>Renderen mislukt</strong><br>{{ c.render_error or '' }}</div>
+              {% elif c.status == 'rendering' %}Bezig met renderen…
+              {% else %}Wacht op renderen…{% endif %}
+            </div>
+          {% endif %}
         </div>
-        {% if c.reason %}<p class="muted" style="font-size:.85rem;margin:0"><strong>Waarom:</strong> {{ c.reason }}</p>{% endif %}
-        {% if c.subscores %}
-        <div class="subscores">
-          <span>Hook-sterkte</span><span>{{ c.subscores.get('hook_sterkte', '–') }}</span>
-          <span>Emotie / verrassing</span><span>{{ c.subscores.get('emotie_of_verrassing', '–') }}</span>
-          <span>Begrijpelijk zonder context</span><span>{{ c.subscores.get('begrijpelijkheid_zonder_context', '–') }}</span>
-          <span>Afronding</span><span>{{ c.subscores.get('afronding', '–') }}</span>
-        </div>
-        {% endif %}
-      </div>
-    </details>
 
-    <details id="yt-{{ c.id }}" {% if c.yt_status in ('queued', 'uploading', 'failed') %}open{% endif %}>
-      <summary>YouTube {% if c.yt_status == 'done' %}· geüpload{% elif c.yt_status in ('queued', 'uploading') %}· bezig{% elif c.yt_status == 'failed' %}· mislukt{% endif %}</summary>
-      <div class="details-body stack">
-        {% if c.yt_status == 'done' and c.yt_video_id %}
-        <p style="margin:0"><a href="https://youtube.com/shorts/{{ c.yt_video_id }}" target="_blank" rel="noopener noreferrer">Bekijk op YouTube ↗</a></p>
-        {% elif c.yt_status in ('queued', 'uploading') %}
-        <p class="muted" style="margin:0">{{ 'Bezig met uploaden…' if c.yt_status == 'uploading' else 'In de wachtrij om te uploaden.' }}</p>
-        {% endif %}
-        {% if c.yt_error %}<div class="flash flash-{{ 'warn' if c.yt_status == 'done' else 'error' }}" style="margin:0;font-size:.85rem">{{ c.yt_error }}</div>{% endif %}
-        {% if yt_connected and c.yt_status not in ('queued', 'uploading') %}
-        <form method="post" action="/clips/{{ c.id }}/youtube">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <div class="field"><label for="yt-title-{{ c.id }}">Titel</label><input id="yt-title-{{ c.id }}" name="title" type="text" maxlength="100" value="{{ c.title }}" required></div>
-          <div class="field"><label for="yt-desc-{{ c.id }}">Beschrijving</label><textarea id="yt-desc-{{ c.id }}" name="description" rows="3">{{ c.post_text }}</textarea></div>
-          <div class="field"><label for="yt-priv-{{ c.id }}">Zichtbaarheid</label>
-            <select id="yt-priv-{{ c.id }}" name="privacy">
-              <option value="private">Privé</option><option value="unlisted">Verborgen (unlisted)</option><option value="public">Openbaar</option>
-            </select></div>
-          <div class="field"><label for="yt-when-{{ c.id }}">Publiceren op <span class="muted" style="font-weight:400">(optioneel)</span></label>
-            <input id="yt-when-{{ c.id }}" name="publish_at" type="datetime-local">
-            <div class="hint">Met een tijd wordt de video eerst privé geüpload en op dat moment openbaar.</div></div>
-          <label class="row" style="font-weight:400;font-size:.85rem;margin-top:.3rem"><input type="checkbox" name="made_for_kids" value="1"> Gemaakt voor kinderen</label>
-          <button class="btn btn-sm btn-primary" type="submit" style="margin-top:.4rem">{{ 'Opnieuw uploaden' if c.yt_status == 'done' else 'Uploaden naar YouTube' }}</button>
-        </form>
-        {% elif not yt_connected %}
-        <p class="muted" style="margin:0;font-size:.85rem"><a href="/account#youtube">Koppel je YouTube-kanaal</a> om direct te uploaden.</p>
-        {% endif %}
-      </div>
-    </details>
+        <div class="clip-side">
+          {% if c.hook %}<div class="clip-hook">“{{ c.hook }}”</div>{% endif %}
+          {% if c.status == 'failed' and c.raw_path %}<div class="flash flash-warn" style="margin:0;font-size:.85rem">{{ c.render_error }}</div>{% endif %}
 
-    <details {% if c.posted_at and c.actual_views is none %}open{% endif %}>
-      <summary>{{ 'Gepost · views invullen' if c.posted_at else 'Markeer als gepost' }}</summary>
-      <div class="details-body stack">
-        <form method="post" action="/clips/{{ c.id }}/posted">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <div class="row">
-            <select name="platform" aria-label="Platform" style="flex:1">
-              {% for pl in ['YouTube Shorts', 'TikTok', 'Instagram Reels', 'Facebook', 'X', 'Anders'] %}
-              <option {% if c.posted_platform == pl %}selected{% endif %}>{{ pl }}</option>{% endfor %}
-            </select>
+          <div class="action-grid">
+            {% if c.file_path or c.raw_path %}<a class="btn btn-primary" href="/clips/{{ c.id }}/download">Download mp4</a>{% endif %}
+            <a class="btn" href="/clips/{{ c.id }}/edit">✎ Indeling &amp; ondertitels</a>
+            {% if c.status in ('failed',) or not c.file_path %}
+            <form method="post" action="/clips/{{ c.id }}/rerender">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn" type="submit">Opnieuw renderen</button>
+            </form>
+            {% endif %}
           </div>
-          <input name="url" type="url" placeholder="Link naar de post (optioneel)" value="{{ c.posted_url or '' }}" aria-label="Link naar de post" style="margin-top:.4rem">
-          <button class="btn btn-sm" type="submit" style="margin-top:.4rem">{{ 'Bijwerken' if c.posted_at else 'Markeer als gepost' }}</button>
-        </form>
-        {% if c.posted_at %}
-        {% if c.posted_url %}<a href="{{ c.posted_url }}" target="_blank" rel="noopener noreferrer" class="muted" style="font-size:.85rem">Bekijk post ↗</a>{% endif %}
-        <form method="post" action="/clips/{{ c.id }}/views" class="row">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input name="views" type="text" inputmode="numeric" placeholder="Echte views" value="{{ c.actual_views if c.actual_views is not none else '' }}" aria-label="Echte views" style="flex:1">
-          <button class="btn btn-sm btn-primary" type="submit">Opslaan</button>
-        </form>
-        <form method="post" action="/clips/{{ c.id }}/unpost" class="inline" data-confirm="Markering 'gepost' en ingevulde views verwijderen?">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button class="linklike" type="submit">Markering verwijderen</button>
-        </form>
-        {% endif %}
+
+          <div class="post-copy">
+            <div class="post-row"><label for="ptitle-{{ c.id }}">Titel</label><button class="btn btn-sm" type="button" data-copy="ptitle-{{ c.id }}">Kopieer</button></div>
+            <textarea id="ptitle-{{ c.id }}" class="post-field" rows="2" readonly>{{ c.title }}</textarea>
+            <div class="post-row"><label for="ptext-{{ c.id }}">Beschrijving</label><button class="btn btn-sm" type="button" data-copy="ptext-{{ c.id }}">Kopieer</button></div>
+            <textarea id="ptext-{{ c.id }}" class="post-field" rows="4" readonly>{{ c.post_text }}</textarea>
+            <form method="post" action="/clips/{{ c.id }}/generate-text">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-sm btn-block" type="submit">{{ '↻ Posttekst opnieuw genereren' if c.description else '✨ Posttekst genereren met AI' }}</button>
+            </form>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat"><div class="k">Viral score</div><div class="v score">{{ c.viral_score }}<span class="muted" style="font-size:.8rem">/10</span></div></div>
+            <div class="stat estimate" title="Schatting: views zijn niet echt te voorspellen">
+              <div class="k">Geschatte views</div>
+              <div class="v">{{ fmt_views(est.low) }} – {{ fmt_views(est.high) }}</div>
+              <div class="muted" style="font-size:.75rem">midden {{ fmt_views(est.mid) }} · schatting</div>
+            </div>
+            {% if c.actual_views is not none %}
+            <div class="stat"><div class="k">Echte views</div><div class="v">{{ fmt_views(c.actual_views) }}</div>
+              {% if c.est_mid_at_post %}<div class="muted" style="font-size:.75rem">geschat bij posten: {{ fmt_views(c.est_mid_at_post) }}</div>{% endif %}</div>
+            {% endif %}
+          </div>
+
+          <details class="sub">
+            <summary>Meer downloads</summary>
+            <div class="details-body action-grid">
+              {% if c.raw_path %}<a class="btn btn-sm" href="/clips/{{ c.id }}/download-raw">Zonder ondertitels</a>{% endif %}
+              <a class="btn btn-sm" href="/clips/{{ c.id }}/subtitles.srt">Ondertitels .srt</a>
+              <a class="btn btn-sm" href="/clips/{{ c.id }}/subtitles.ass">Ondertitels .ass</a>
+            </div>
+          </details>
+
+          <details class="sub">
+            <summary>Tekst, tijden en beeldvulling</summary>
+            <div class="details-body stack">
+              <form method="post" action="/clips/{{ c.id }}/retitle">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="field"><label for="title-{{ c.id }}">Titel</label><input id="title-{{ c.id }}" name="title" type="text" value="{{ c.title }}" maxlength="300" required></div>
+                <div class="field"><label for="desc-{{ c.id }}">Beschrijving</label><textarea id="desc-{{ c.id }}" name="description" rows="2">{{ c.description }}</textarea></div>
+                <div class="form-2">
+                  <div class="field"><label for="tags-{{ c.id }}">Hashtags</label><input id="tags-{{ c.id }}" name="hashtags" type="text" value="{{ c.hashtags }}" placeholder="#shorts"></div>
+                  <div class="field"><label for="hook-{{ c.id }}">Hook (openingszin)</label><input id="hook-{{ c.id }}" name="hook" type="text" value="{{ c.hook }}"></div>
+                </div>
+                <button class="btn btn-sm" type="submit">Tekst opslaan</button>
+              </form>
+              <form method="post" action="/clips/{{ c.id }}/trim">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-2">
+                  <div class="field"><label for="start-{{ c.id }}">Start (s)</label><input id="start-{{ c.id }}" name="start" type="text" inputmode="decimal" value="{{ c.start }}"></div>
+                  <div class="field"><label for="end-{{ c.id }}">Einde (s)</label><input id="end-{{ c.id }}" name="end" type="text" inputmode="decimal" value="{{ c.end }}"></div>
+                </div>
+                <button class="btn btn-sm" type="submit">Trimmen en opnieuw renderen</button>
+              </form>
+              <form method="post" action="/clips/{{ c.id }}/framing">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-2">
+                  <div class="field"><label for="mode-{{ c.id }}">Beeldvulling</label>
+                    <select id="mode-{{ c.id }}" name="mode">
+                      <option value="project" {% if not c.framing_choice %}selected{% endif %}>Zoals het project</option>
+                      {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if c.framing_choice == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select></div>
+                  <div class="field"><label for="pos-{{ c.id }}">Positie (links ↔ rechts)</label>
+                    <input id="pos-{{ c.id }}" name="position" type="range" min="0" max="100" step="5" value="{{ ((c.crop_x if c.crop_x is not none else 0.5) * 100)|round|int }}"></div>
+                </div>
+                <button class="btn btn-sm" type="submit">Toepassen en opnieuw renderen</button>
+              </form>
+              <div class="action-grid">
+                <form method="post" action="/clips/{{ c.id }}/captions">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="enabled" value="{{ '0' if c.captions_enabled else '1' }}">
+                  <button class="btn btn-sm" type="submit">Ondertitels {{ 'uit' if c.captions_enabled else 'aan' }}zetten</button>
+                </form>
+                <form method="post" action="/clips/{{ c.id }}/rerender">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="btn btn-sm" type="submit">Opnieuw renderen</button>
+                </form>
+                <form method="post" action="/clips/{{ c.id }}/delete" data-confirm="Deze clip verwijderen?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="btn btn-sm btn-danger" type="submit">Verwijderen</button>
+                </form>
+              </div>
+              {% if c.reason %}<p class="muted" style="font-size:.85rem;margin:0"><strong>Waarom:</strong> {{ c.reason }}</p>{% endif %}
+              {% if c.subscores %}
+              <div class="subscores">
+                <span>Hook-sterkte</span><span>{{ c.subscores.get('hook_sterkte', '–') }}</span>
+                <span>Emotie / verrassing</span><span>{{ c.subscores.get('emotie_of_verrassing', '–') }}</span>
+                <span>Begrijpelijk zonder context</span><span>{{ c.subscores.get('begrijpelijkheid_zonder_context', '–') }}</span>
+                <span>Afronding</span><span>{{ c.subscores.get('afronding', '–') }}</span>
+              </div>
+              {% endif %}
+            </div>
+          </details>
+
+          <details class="sub" id="yt-{{ c.id }}" {% if c.yt_status in ('queued', 'uploading', 'failed') %}open{% endif %}>
+            <summary>YouTube {% if c.yt_status == 'done' %}· geüpload{% elif c.yt_status in ('queued', 'uploading') %}· bezig{% elif c.yt_status == 'failed' %}· mislukt{% endif %}</summary>
+            <div class="details-body stack">
+              {% if c.yt_status == 'done' and c.yt_video_id %}
+              <p style="margin:0"><a href="https://youtube.com/shorts/{{ c.yt_video_id }}" target="_blank" rel="noopener noreferrer">Bekijk op YouTube ↗</a></p>
+              {% elif c.yt_status in ('queued', 'uploading') %}
+              <p class="muted" style="margin:0">{{ 'Bezig met uploaden…' if c.yt_status == 'uploading' else 'In de wachtrij om te uploaden.' }}</p>
+              {% endif %}
+              {% if c.yt_error %}<div class="flash flash-{{ 'warn' if c.yt_status == 'done' else 'error' }}" style="margin:0;font-size:.85rem">{{ c.yt_error }}</div>{% endif %}
+              {% if yt_connected and c.yt_status not in ('queued', 'uploading') %}
+              <form method="post" action="/clips/{{ c.id }}/youtube">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="field"><label for="yt-title-{{ c.id }}">Titel</label><input id="yt-title-{{ c.id }}" name="title" type="text" maxlength="100" value="{{ c.title }}" required></div>
+                <div class="field"><label for="yt-desc-{{ c.id }}">Beschrijving</label><textarea id="yt-desc-{{ c.id }}" name="description" rows="3">{{ c.post_text }}</textarea></div>
+                <div class="form-2">
+                  <div class="field"><label for="yt-priv-{{ c.id }}">Zichtbaarheid</label>
+                    <select id="yt-priv-{{ c.id }}" name="privacy">
+                      <option value="private">Privé</option><option value="unlisted">Verborgen (unlisted)</option><option value="public">Openbaar</option>
+                    </select></div>
+                  <div class="field"><label for="yt-when-{{ c.id }}">Publiceren op <span class="muted" style="font-weight:400">(optioneel)</span></label>
+                    <input id="yt-when-{{ c.id }}" name="publish_at" type="datetime-local"></div>
+                </div>
+                <label class="check-line"><input type="checkbox" name="made_for_kids" value="1"> Gemaakt voor kinderen</label>
+                <button class="btn btn-sm btn-primary" type="submit">{{ 'Opnieuw uploaden' if c.yt_status == 'done' else 'Uploaden naar YouTube' }}</button>
+              </form>
+              {% elif not yt_connected %}
+              <p class="muted" style="margin:0;font-size:.85rem"><a href="/account#youtube">Koppel je YouTube-kanaal</a> om direct te uploaden.</p>
+              {% endif %}
+            </div>
+          </details>
+
+          <details class="sub" {% if c.posted_at and c.actual_views is none %}open{% endif %}>
+            <summary>{{ 'Gepost · views invullen' if c.posted_at else 'Markeer als gepost' }}</summary>
+            <div class="details-body stack">
+              <form method="post" action="/clips/{{ c.id }}/posted">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-2">
+                  <div class="field"><label for="plat-{{ c.id }}">Platform</label>
+                    <select id="plat-{{ c.id }}" name="platform">
+                      {% for pl in ['YouTube Shorts', 'TikTok', 'Instagram Reels', 'Facebook', 'X', 'Anders'] %}
+                      <option {% if c.posted_platform == pl %}selected{% endif %}>{{ pl }}</option>{% endfor %}
+                    </select></div>
+                  <div class="field"><label for="purl-{{ c.id }}">Link <span class="muted" style="font-weight:400">(optioneel)</span></label>
+                    <input id="purl-{{ c.id }}" name="url" type="url" placeholder="https://…" value="{{ c.posted_url or '' }}"></div>
+                </div>
+                <button class="btn btn-sm" type="submit">{{ 'Bijwerken' if c.posted_at else 'Markeer als gepost' }}</button>
+              </form>
+              {% if c.posted_at %}
+              {% if c.posted_url %}<a href="{{ c.posted_url }}" target="_blank" rel="noopener noreferrer" class="muted" style="font-size:.85rem">Bekijk post ↗</a>{% endif %}
+              <form method="post" action="/clips/{{ c.id }}/views">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-2">
+                  <div class="field"><label for="views-{{ c.id }}">Echte views</label>
+                    <input id="views-{{ c.id }}" name="views" type="text" inputmode="numeric" value="{{ c.actual_views if c.actual_views is not none else '' }}"></div>
+                  <div class="field"><label>&nbsp;</label><button class="btn btn-primary btn-block" type="submit">Opslaan</button></div>
+                </div>
+              </form>
+              <form method="post" action="/clips/{{ c.id }}/unpost" data-confirm="Markering 'gepost' en ingevulde views verwijderen?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="linklike" type="submit">Markering verwijderen</button>
+              </form>
+              {% endif %}
+            </div>
+          </details>
+        </div>
       </div>
-    </details>
+    </div>
   </div>
 </article>
