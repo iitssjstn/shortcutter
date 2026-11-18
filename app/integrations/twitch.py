@@ -143,13 +143,19 @@ def _clip(d: dict) -> dict:
     }
 
 
-def get_clips(db: Session, broadcaster_id: str, period: str = "week", first: int = 24) -> list[dict]:
-    key = ("clips", broadcaster_id, period, first)
+def get_clips(db: Session, broadcaster_id: str, period: str = "week", first: int = 24,
+              game_id: str | None = None) -> list[dict]:
+    """Top-clips van een kanaal (broadcaster_id) of van een hele game/categorie (game_id)."""
+    key = ("clips", broadcaster_id, game_id, period, first)
     hit = _cache.get(key)
     if hit and hit[0] > time.time():
         return hit[1]  # type: ignore[return-value]
     creds = _creds_or_raise(db)
-    params: dict = {"broadcaster_id": broadcaster_id, "first": max(1, min(100, first))}
+    params: dict = {"first": max(1, min(100, first))}
+    if game_id:
+        params["game_id"] = game_id
+    else:
+        params["broadcaster_id"] = broadcaster_id
     days = PERIODS.get(period, 7)
     if days:
         now = datetime.now(timezone.utc)
@@ -160,6 +166,27 @@ def get_clips(db: Session, broadcaster_id: str, period: str = "week", first: int
     clips = sorted((_clip(d) for d in data.get("data") or []), key=lambda c: c["views"], reverse=True)
     _cache[key] = (time.time() + CACHE_SECONDS, clips)
     return clips
+
+
+def search_categories(db: Session, query: str, first: int = 12) -> list[dict]:
+    """Zoek games/categorieën op naam, bijv. 'GTA'."""
+    query = (query or "").strip()[:100]
+    if not query:
+        return []
+    key = ("search", query.lower())
+    hit = _cache.get(key)
+    if hit and hit[0] > time.time():
+        return hit[1]  # type: ignore[return-value]
+    creds = _creds_or_raise(db)
+    with _client_factory() as client:
+        data = helix(creds, "search/categories", {"query": query, "first": first}, client)
+    out = []
+    for d in data.get("data") or []:
+        art = (d.get("box_art_url") or "").replace("{width}", "104").replace("{height}", "139").replace("52x72", "104x139")
+        out.append({"id": str(d.get("id", "")), "name": d.get("name", ""),
+                    "box_art": art if art.startswith("https://") else ""})
+    _cache[key] = (time.time() + CACHE_SECONDS, out)
+    return out
 
 
 def get_game_name(db: Session, game_id: str) -> str | None:

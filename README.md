@@ -179,6 +179,10 @@ clips van de afgelopen dag, week, maand of altijd, en maak je er met één klik 
 "Gesplitst": facecam boven, gameplay onder). De posttekst krijgt automatisch een credit (`twitch.tv/kanaal`).
 Kanalen zijn persoonlijk: elke gebruiker ziet alleen zijn eigen lijst.
 
+Met **Zoeken op game** zoek je een game of categorie (bijv. "GTA") en zie je de meest bekeken clips van alle
+streamers in die categorie, per dag, week, maand of altijd. Omzetten kan alleen bij streamers in je kanalenlijst;
+bij andere streamers staat een knop om het kanaal toe te voegen zodra je toestemming hebt.
+
 Hiervoor heeft de beheerder een gratis Twitch-app nodig: maak er een op `dev.twitch.tv/console/apps`
 (redirect-URL `http://localhost`, categorie *Application Integration*) en vul client-ID en client-secret in bij
 **API-sleutels**. Shortcutter leest alleen openbare clipgegevens en plaatst niets op Twitch.

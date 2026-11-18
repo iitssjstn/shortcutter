@@ -34,6 +34,10 @@ def twitch_page(
     request: Request,
     channel: int | None = None,
     period: str = "week",
+    view: str = "kanalen",
+    q: str = "",
+    game: str = "",
+    add: str = "",
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -41,11 +45,19 @@ def twitch_page(
                                .order_by(TwitchChannel.display_name)).all())
     has_key = twitch.credential(db) is not None
     period = period if period in twitch.PERIODS else "week"
+    view = "zoeken" if view == "zoeken" else "kanalen"
     selected = next((c for c in channels if c.id == channel), channels[0] if channels else None)
-    clips, error = [], None
-    if selected is not None and has_key:
+    clips, error, categories, game_name = [], None, [], ""
+    if has_key:
         try:
-            clips = twitch.get_clips(db, selected.broadcaster_id, period)
+            if view == "zoeken":
+                if q.strip():
+                    categories = twitch.search_categories(db, q)
+                if game.isdigit():
+                    clips = twitch.get_clips(db, "", period, first=50, game_id=game)
+                    game_name = twitch.get_game_name(db, game) or ""
+            elif selected is not None:
+                clips = twitch.get_clips(db, selected.broadcaster_id, period)
         except twitch.TwitchError as exc:
             error = str(exc)
     imported = set(db.scalars(select(Project.source_url).where(Project.owner_id == user.id,
@@ -61,6 +73,13 @@ def twitch_page(
         "periods": twitch.PERIOD_LABELS,
         "imported": imported,
         "framing_default": "split",
+        "view": view,
+        "q": q.strip()[:100],
+        "game": game if game.isdigit() else "",
+        "game_name": game_name,
+        "categories": categories,
+        "permitted": {c.broadcaster_id: c for c in channels},
+        "add_login": add.strip().lstrip("@")[:40],
     })
 
 
@@ -122,14 +141,20 @@ async def import_clips(
     db: Session = Depends(get_db),
 ):
     form = await request.form()
-    try:
-        ch = _channel(db, user, int(form.get("channel_id", "0")))
-    except ValueError as exc:
-        raise HTTPException(400, "Ongeldig kanaal.") from exc
+    fixed: TwitchChannel | None = None
+    if form.get("channel_id"):
+        try:
+            fixed = _channel(db, user, int(form.get("channel_id", "0")))
+        except ValueError as exc:
+            raise HTTPException(400, "Ongeldig kanaal.") from exc
+    # zonder vast kanaal (zoeken op game): alleen clips van kanalen in je eigen lijst
+    allowed = {c.broadcaster_id: c for c in db.scalars(select(TwitchChannel).where(TwitchChannel.owner_id == user.id))}
     urls = [u for u in form.getlist("urls") if isinstance(u, str)][:MAX_IMPORT]
     framing = form.get("framing", "split")
     framing = framing if framing in FRAMING_MODES else "split"
-    back = f"/twitch?channel={ch.id}&period={form.get('period', 'week')}"
+    back_raw = str(form.get("back", ""))
+    back = back_raw if back_raw.startswith("/twitch") else (
+        f"/twitch?channel={fixed.id}&period={form.get('period', 'week')}" if fixed else "/twitch")
     if not urls:
         return redirect(back, "Selecteer eerst een of meer clips.", "error")
     limit = get_global_int(db, "max_active_per_user")
@@ -146,9 +171,13 @@ async def import_clips(
             clip = twitch.get_clip(db, slug)
         except twitch.TwitchError as exc:
             return redirect(back, str(exc), "error")
-        # alleen clips van dit (toegestane) kanaal
-        if clip is None or clip["broadcaster_id"] != ch.broadcaster_id:
-            skipped.append(f"{slug}: niet van {ch.display_name}")
+        if clip is None:
+            skipped.append(f"{slug}: niet gevonden")
+            continue
+        # alleen clips van een kanaal waarvoor je toestemming hebt (of je eigen kanaal)
+        ch = fixed if fixed is not None else allowed.get(clip["broadcaster_id"])
+        if ch is None or clip["broadcaster_id"] != ch.broadcaster_id:
+            skipped.append(f"{clip.get('broadcaster_name') or slug}: geen toestemming (voeg het kanaal eerst toe)")
             continue
         if limit > 0 and active >= limit:
             skipped.append("maximum actieve projecten bereikt")

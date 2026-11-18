@@ -55,6 +55,21 @@ class FakeTwitch:
                 return httpx.Response(200, json={"data": []})
             return httpx.Response(200, json={"data": [{"id": "123", "login": q["login"], "display_name": "Streamer",
                                                        "profile_image_url": "https://static-cdn.jtvnw.net/p.png"}]})
+        if path.endswith("/search/categories"):
+            if "gta" in q["query"].lower():
+                return httpx.Response(200, json={"data": [
+                    {"id": "777", "name": "Grand Theft Auto VI", "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/777-{width}x{height}.jpg"},
+                    {"id": "32982", "name": "Grand Theft Auto V", "box_art_url": ""}]})
+            return httpx.Response(200, json={"data": []})
+        if path.endswith("/games"):
+            return httpx.Response(200, json={"data": [{"id": q["id"], "name": "Grand Theft Auto VI"}]})
+        if path.endswith("/clips") and "game_id" in q:
+            return httpx.Response(200, json={"data": [
+                dict(self.clips["123"][0], game_id=q["game_id"]),
+                {"id": "Vreemd-xyz", "url": "https://clips.twitch.tv/Vreemd-xyz", "title": "Andere streamer",
+                 "view_count": 99000, "duration": 20, "broadcaster_id": "999", "broadcaster_name": "AndereStreamer",
+                 "created_at": "2026-11-16T10:00:00Z", "game_id": q["game_id"]},
+            ]})
         if path.endswith("/clips"):
             if "id" in q:
                 for lst in self.clips.values():
@@ -188,3 +203,34 @@ def test_twitch_page_without_key(admin_client):
 def test_csp_allows_twitch_thumbnails(admin_client):
     csp = admin_client.get("/twitch").headers["content-security-policy"]
     assert "https://static-cdn.jtvnw.net" in csp
+
+
+def test_search_by_game_and_import_only_permitted(admin_client, fake):
+    _add_key(admin_client)
+    page = admin_client.get("/twitch?view=zoeken&q=GTA").text
+    assert "Grand Theft Auto VI" in page and "game=777" in page
+    page = admin_client.get("/twitch?view=zoeken&q=GTA&game=777&period=week").text
+    assert "Grand Theft Auto VI · meest bekeken clips" in page
+    assert "AndereStreamer" in page and "Insane 1v5 clutch" in page
+    # nog geen kanalen: geen selectievakjes, wel 'kanaal toevoegen'
+    assert 'name="urls"' not in page and "add=anderestreamer" in page
+    # kanaal 'streamer' toevoegen (met toestemming): die clip wordt selecteerbaar
+    admin_client.post("/twitch/channels", data={"login": "streamer", "confirm": "1"})
+    page = admin_client.get("/twitch?view=zoeken&q=GTA&game=777&period=week").text
+    assert 'value="https://clips.twitch.tv/SlugEen-abc"' in page
+    assert 'value="https://clips.twitch.tv/Vreemd-xyz"' not in page
+    # importeren zonder vast kanaal: alleen de toegestane clip
+    r = admin_client.post("/twitch/import", data={
+        "back": "/twitch?view=zoeken&game=777", "framing": "split",
+        "urls": ["https://clips.twitch.tv/SlugEen-abc", "https://clips.twitch.tv/Vreemd-xyz"]})
+    assert r.status_code == 303
+    db = new_session()
+    urls = [p.source_url for p in db.scalars(select(Project))]
+    db.close()
+    assert urls == ["https://clips.twitch.tv/SlugEen-abc"]
+
+
+def test_add_channel_prefilled_from_search(admin_client, fake):
+    _add_key(admin_client)
+    page = admin_client.get("/twitch?view=zoeken&add=anderestreamer").text
+    assert 'value="anderestreamer"' in page

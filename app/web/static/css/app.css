@@ -52,7 +52,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
 label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
 .field { margin-bottom: .85rem; }
 .hint { font-size: .82rem; color: var(--muted); margin-top: .2rem; font-weight: 400; }
-input[type=text], input[type=password], input[type=email], input[type=number], input[type=url], select, textarea {
+input[type=text], input[type=password], input[type=email], input[type=number], input[type=url], input[type=search], input[type=datetime-local], select, textarea {
   width: 100%; padding: .55rem .65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
   color: var(--text); font: inherit;
 }
@@ -139,6 +139,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .facecam-picker { position: relative; display: inline-block; max-width: 100%; touch-action: none; cursor: crosshair; user-select: none; border-radius: 8px; overflow: hidden; line-height: 0; }
 .facecam-picker img { width: 100%; max-width: 960px; pointer-events: none; }
 .facecam-sel { position: absolute; border: 3px solid var(--accent); background: rgba(229, 72, 77, .18); box-sizing: border-box; }
+.tw-tabs { display: grid; grid-template-columns: repeat(2, max-content); gap: .4rem; margin-bottom: 1rem; }
+.tw-tab { padding: .5rem 1rem; border-radius: 999px; border: 1px solid var(--border); text-decoration: none; font-weight: 600; color: var(--muted); }
+.tw-tab.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.tw-search { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem; align-items: center; }
+.tw-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .6rem; margin-bottom: 1rem; }
+.tw-cat { display: grid; gap: .35rem; text-decoration: none; padding: .4rem; border-radius: 8px; border: 2px solid transparent; font-size: .85rem; font-weight: 600; text-align: center; }
+.tw-cat:hover, .tw-cat.on { border-color: var(--accent); background: var(--surface); }
+.tw-cat img, .tw-cat-ph { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 6px; background: var(--surface-2); display: block; }
+.tw-toolbar { display: grid; grid-template-columns: auto minmax(0, 320px) auto; justify-content: end; gap: .6rem; align-items: center; margin-bottom: 1rem; }
+.tw-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .6rem; align-items: center; }
+.tw-periods { display: grid; grid-auto-flow: column; gap: .35rem; }
+.tw-clip-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; align-items: start; }
+.twitch-clip.locked { cursor: default; }
+.twitch-clip-body > .badge, .twitch-clip-body > a { align-self: flex-start; }
+.twitch-clip .btn-sm { justify-self: start; }
 .twitch-layout { display: grid; grid-template-columns: 260px 1fr; gap: 1rem; align-items: start; }
 .channel-item { display: flex; gap: .6rem; align-items: center; padding: .45rem; border-radius: 8px; text-decoration: none; }
 .channel-item:hover, .channel-item.active { background: var(--surface-2); }
@@ -287,6 +302,12 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
   .clip-grid { grid-template-columns: 1fr; }
   .clip-video { max-height: 70vh; }
   .twitch-layout { grid-template-columns: 1fr; }
+  .tw-search { grid-template-columns: 1fr; }
+  .tw-toolbar { grid-template-columns: 1fr; justify-content: stretch; }
+  .tw-toolbar .btn { width: 100%; }
+  .twitch-layout > section { order: -1; }
+  .tw-head { grid-template-columns: 1fr; }
+  .tw-periods { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
   .ed-panes { grid-template-columns: 1fr; }
   .ed-port { max-width: 320px; width: 100%; justify-self: center; }
   .ed-controls { grid-template-columns: 1fr; }

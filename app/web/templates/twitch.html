@@ -14,8 +14,13 @@
   Losse Twitch-links (clip of VOD) kun je wel gewoon op het <a href="/">dashboard</a> plakken.</div>
 {% endif %}
 
+<div class="tw-tabs">
+  <a class="tw-tab {{ 'on' if view == 'kanalen' }}" href="/twitch">Mijn kanalen</a>
+  <a class="tw-tab {{ 'on' if view == 'zoeken' }}" href="/twitch?view=zoeken">Zoeken op game</a>
+</div>
+
 <div class="twitch-layout">
-  <aside class="card">
+  <aside class="card" id="add">
     <h2>Kanalen</h2>
     {% for c in channels %}
     <a class="channel-item {{ 'active' if selected and selected.id == c.id }}" href="/twitch?channel={{ c.id }}&period={{ period }}">
@@ -25,11 +30,11 @@
     {% else %}
     <p class="muted" style="font-size:.9rem">Nog geen kanalen.</p>
     {% endfor %}
-    <details {% if not channels %}open{% endif %} style="margin-top:.75rem">
+    <details {% if not channels or add_login %}open{% endif %} style="margin-top:.75rem">
       <summary>Kanaal toevoegen</summary>
       <form method="post" action="/twitch/channels" class="details-body">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <div class="field"><label for="tw-login">Kanaalnaam</label><input id="tw-login" name="login" type="text" placeholder="bijv. mijnkanaal of twitch.tv/mijnkanaal" required></div>
+        <div class="field"><label for="tw-login">Kanaalnaam</label><input id="tw-login" name="login" type="text" placeholder="bijv. mijnkanaal of twitch.tv/mijnkanaal" value="{{ add_login }}" required></div>
         <div class="field"><label for="tw-rel">Relatie</label>
           <select id="tw-rel" name="relation"><option value="toestemming">Streamer heeft mij toestemming gegeven</option><option value="eigen">Mijn eigen kanaal</option></select></div>
         <div class="field"><label for="tw-note">Afspraak / notitie <span class="muted" style="font-weight:400">(optioneel)</span></label>
@@ -42,7 +47,75 @@
   </aside>
 
   <section>
-    {% if selected %}
+    {% if view == 'zoeken' %}
+    <form method="get" action="/twitch" class="card tw-search">
+      <input type="hidden" name="view" value="zoeken">
+      <label for="tw-q" style="margin:0">Game of categorie</label>
+      <input id="tw-q" name="q" type="search" value="{{ q }}" placeholder="bijv. GTA, Rainbow Six, Just Chatting" required>
+      <button class="btn btn-primary" type="submit" {% if not has_key %}disabled{% endif %}>Zoeken</button>
+    </form>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+    {% if categories %}
+    <div class="tw-cats">
+      {% for cat in categories %}
+      <a class="tw-cat {{ 'on' if game == cat.id }}" href="/twitch?view=zoeken&q={{ q|urlencode }}&game={{ cat.id }}&period={{ period }}">
+        {% if cat.box_art %}<img src="{{ cat.box_art }}" alt="" loading="lazy">{% else %}<span class="tw-cat-ph"></span>{% endif %}
+        <span>{{ cat.name }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% elif q and not error %}
+    <div class="card empty">Geen categorieën gevonden voor "{{ q }}".</div>
+    {% endif %}
+
+    {% if game %}
+    <div class="card">
+      <div class="tw-head">
+        <h2 style="margin:0">{{ game_name or 'Categorie' }} · meest bekeken clips</h2>
+        <div class="tw-periods">
+          {% for k, label in periods.items() %}<a class="btn btn-sm {{ 'btn-primary' if period == k }}" href="/twitch?view=zoeken&q={{ q|urlencode }}&game={{ game }}&period={{ k }}">{{ label }}</a>{% endfor %}
+        </div>
+      </div>
+      <p class="hint" style="margin:.5rem 0 0">Clips van alle streamers in deze categorie. Omzetten kan alleen bij streamers in je kanalenlijst (eigen kanaal of met toestemming). Bij andere streamers kun je het kanaal toevoegen zodra je toestemming hebt.</p>
+    </div>
+    {% if clips %}
+    <form method="post" action="/twitch/import">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="back" value="/twitch?view=zoeken&q={{ q|urlencode }}&game={{ game }}&period={{ period }}">
+      <div class="tw-toolbar">
+        <label for="tw-framing-s" style="margin:0">Beeldvulling</label>
+        <select id="tw-framing-s" name="framing" style="width:auto">
+          {% for k, label in FRAMING_MODES.items() %}<option value="{{ k }}" {% if k == framing_default %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">Maak shorts van selectie</button>
+      </div>
+      <div class="twitch-grid">
+        {% for c in clips %}{% set ok = c.broadcaster_id in permitted %}
+        <div class="twitch-clip {{ 'done' if c.url in imported }} {{ '' if ok else 'locked' }}">
+          {% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" loading="lazy">{% else %}<span class="twitch-thumb-ph"></span>{% endif %}
+          <span class="twitch-clip-body">
+            <span class="tw-clip-top">
+              <span class="twitch-title">{{ c.title }}</span>
+              {% if ok %}<input type="checkbox" class="twitch-check" name="urls" value="{{ c.url }}" aria-label="Selecteren" {% if c.url in imported %}disabled{% endif %}>{% endif %}
+            </span>
+            <span class="muted" style="font-size:.8rem"><strong>{{ c.broadcaster_name }}</strong> · {{ fmt_views(c.views) }} views · {{ '%.0f'|format(c.duration) }} s · {{ c.created_at[:10] }}</span>
+            {% if c.url in imported %}<span class="badge badge-ok">al omgezet</span>
+            {% elif ok %}<span class="badge badge-ok">toestemming</span>
+            {% else %}<a class="btn btn-sm" href="/twitch?view=zoeken&q={{ q|urlencode }}&game={{ game }}&period={{ period }}&add={{ c.broadcaster_name|lower|urlencode }}#add">+ Kanaal toevoegen</a>{% endif %}
+            <a class="muted" style="font-size:.8rem" href="{{ c.url }}" target="_blank" rel="noopener noreferrer">Bekijk op Twitch ↗</a>
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </form>
+    {% elif not error %}
+    <div class="card empty">Geen clips in deze periode. Kies een langere periode.</div>
+    {% endif %}
+    {% elif not q %}
+    <div class="card empty">Zoek een game of categorie om de meest bekeken clips te zien.</div>
+    {% endif %}
+
+    {% elif selected %}
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <div>
