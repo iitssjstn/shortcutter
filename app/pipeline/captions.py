@@ -77,30 +77,90 @@ def group_words(words: list[dict], clip_start: float, clip_end: float) -> list[l
     return groups
 
 
-def build_ass(words: list[dict], clip_start: float, clip_end: float, style: str = "geel") -> str:
-    primary, secondary = STYLE_COLORS.get(style, STYLE_COLORS["geel"])
-    lines = [HEADER.format(primary=primary, secondary=secondary)]
-    groups = group_words(words, clip_start, clip_end)
+SIZES = {"S": 68, "M": 86, "L": 108}
+POSITIONS = {"boven": 16, "naad": 35, "midden": 50, "onder": 72}
+DEFAULT_OPTS = {"pos": 72, "size": "M", "color": None, "upper": True}
+
+
+def default_groups(words: list[dict], clip_start: float, clip_end: float) -> list[dict]:
+    """Ondertitelregels (relatief aan de clip) zoals ze automatisch uit het transcript komen."""
+    out = []
+    for g in group_words(words, clip_start, clip_end):
+        out.append({"start": round(g[0]["start"], 3), "end": round(g[-1]["end"], 3),
+                    "text": " ".join(w["word"] for w in g), "words": g})
+    return out
+
+
+def retime(group: dict, text: str) -> dict:
+    """Nieuwe tekst voor een regel: woorden gelijkmatig over de oorspronkelijke tijd verdelen."""
+    toks = text.split()
+    start, end = group["start"], max(group["end"], group["start"] + 0.2)
+    step = (end - start) / max(1, len(toks))
+    words = [{"start": round(start + i * step, 3), "end": round(start + (i + 1) * step, 3), "word": t}
+             for i, t in enumerate(toks)]
+    return {"start": start, "end": end, "text": " ".join(toks), "words": words}
+
+
+def merge_opts(opts: dict | None, style: str) -> dict:
+    o = dict(DEFAULT_OPTS)
+    o.update({k: v for k, v in (opts or {}).items() if v is not None})
+    o["color"] = o.get("color") or style
+    try:
+        o["pos"] = max(5, min(95, int(float(o["pos"]))))
+    except (TypeError, ValueError):
+        o["pos"] = DEFAULT_OPTS["pos"]
+    if o["size"] not in SIZES:
+        o["size"] = "M"
+    o["upper"] = bool(o.get("upper"))
+    return o
+
+
+def build_ass(
+    words: list[dict],
+    clip_start: float,
+    clip_end: float,
+    style: str = "geel",
+    opts: dict | None = None,
+    groups: list[dict] | None = None,
+) -> str:
+    """Karaoke-ondertitels. `groups` (eigen tekst) en `opts` (positie, grootte, kleur, hoofdletters) zijn optioneel."""
+    o = merge_opts(opts, style)
+    primary, secondary = STYLE_COLORS.get(o["color"], STYLE_COLORS["geel"])
+    header = HEADER.format(primary=primary, secondary=secondary).replace(
+        "Karaoke,DejaVu Sans,86,", f"Karaoke,DejaVu Sans,{SIZES[o['size']]},")
+    lines = [header]
+    if groups is None:
+        groups = default_groups(words, clip_start, clip_end)
+    y = int(1920 * o["pos"] / 100)
+    pos_tag = f"{{\\an5\\pos(540,{y})}}"
     for i, g in enumerate(groups):
-        start = g[0]["start"]
-        end = g[-1]["end"]
-        nxt = groups[i + 1][0]["start"] if i + 1 < len(groups) else None
+        ws = g.get("words") or retime(g, g.get("text", ""))["words"]
+        if not ws:
+            continue
+        start = g["start"]
+        end = g["end"]
+        nxt = groups[i + 1]["start"] if i + 1 < len(groups) else None
         if nxt is not None:
             end = min(max(end, start + 0.3), nxt)
         parts = []
         cursor = start
-        for w in g:
+        for w in ws:
             # wachttijd vóór het woord telt mee bij het vorige
             dur_cs = max(1, int(round((w["end"] - cursor) * 100)))
-            parts.append(f"{{\\k{dur_cs}}}{escape_ass(w['word'].upper())}")
+            word = w["word"].upper() if o["upper"] else w["word"]
+            parts.append(f"{{\\k{dur_cs}}}{escape_ass(word)}")
             cursor = w["end"]
         text = " ".join(parts)
-        lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Karaoke,,0,0,0,,{text}")
+        lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Karaoke,,0,0,0,,{pos_tag}{text}")
     return "\n".join(lines) + "\n"
 
 
-def build_srt(words: list[dict], clip_start: float, clip_end: float) -> str:
+def build_srt(words: list[dict], clip_start: float, clip_end: float, groups: list[dict] | None = None) -> str:
     out = []
+    if groups is not None:
+        for i, g in enumerate([g for g in groups if g.get("text", "").strip()], 1):
+            out.append(f"{i}\n{srt_time(g['start'])} --> {srt_time(g['end'])}\n{g['text'].strip()}\n")
+        return "\n".join(out)
     # voor .srt: iets langere regels (max 7 woorden) voor leesbaarheid
     rel = [g for g in group_words(words, clip_start, clip_end)]
     merged: list[list[dict]] = []
@@ -116,6 +176,7 @@ def build_srt(words: list[dict], clip_start: float, clip_end: float) -> str:
     return "\n".join(out)
 
 
-def write_ass(path: Path, words: list[dict], clip_start: float, clip_end: float, style: str = "geel") -> Path:
-    path.write_text(build_ass(words, clip_start, clip_end, style), encoding="utf-8")
+def write_ass(path: Path, words: list[dict], clip_start: float, clip_end: float, style: str = "geel",
+              opts: dict | None = None, groups: list[dict] | None = None) -> Path:
+    path.write_text(build_ass(words, clip_start, clip_end, style, opts, groups), encoding="utf-8")
     return path

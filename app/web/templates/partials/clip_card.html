@@ -50,6 +50,7 @@
 
     <div class="clip-actions">
       {% if c.file_path or c.raw_path %}<a class="btn btn-sm btn-primary" href="/clips/{{ c.id }}/download">Download mp4</a>{% endif %}
+      <a class="btn btn-sm" href="/clips/{{ c.id }}/edit">✎ Indeling &amp; ondertitels</a>
       {% if c.status in ('failed',) or not c.file_path %}
       <form method="post" action="/clips/{{ c.id }}/rerender" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -242,6 +242,10 @@ class Clip(Base, JsonMixin):
     framing_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)  # resultaat: vertical|crop|blur
     framing_choice: Mapped[str | None] = mapped_column(String(16), nullable=True)  # keuze; None = projectinstelling
     crop_x: Mapped[float | None] = mapped_column(Float, nullable=True)  # handmatige positie 0..1
+    layout_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # eigen indeling uit de editor
+    auto_layout_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # laatst automatisch gekozen indeling
+    captions_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # eigen ondertitelregels
+    caption_opts_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # positie/grootte/kleur/hoofdletters
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -273,6 +277,22 @@ class Clip(Base, JsonMixin):
     @property
     def duration(self) -> float:
         return max(0.0, self.end - self.start)
+
+    @property
+    def layout(self) -> dict | None:
+        return self._load(self.layout_json, None)
+
+    @property
+    def auto_layout(self) -> dict | None:
+        return self._load(self.auto_layout_json, None)
+
+    @property
+    def custom_captions(self) -> list | None:
+        return self._load(self.captions_json, None)
+
+    @property
+    def caption_opts(self) -> dict:
+        return self._load(self.caption_opts_json, {})
 
     @property
     def post_text(self) -> str:

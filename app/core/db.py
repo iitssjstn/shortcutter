@@ -57,6 +57,10 @@ _ADDED_COLUMNS = [
     ("projects", "facecam_box", "VARCHAR(64)"),
     ("projects", "llm_model", "VARCHAR(120)"),
     ("projects", "credit", "VARCHAR(200)"),
+    ("clips", "layout_json", "TEXT"),
+    ("clips", "auto_layout_json", "TEXT"),
+    ("clips", "captions_json", "TEXT"),
+    ("clips", "caption_opts_json", "TEXT"),
     ("clips", "hashtags", "VARCHAR(300) NOT NULL DEFAULT ''"),
 ]
 

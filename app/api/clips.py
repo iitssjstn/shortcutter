@@ -4,23 +4,25 @@ from __future__ import annotations
 import json
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.common import redirect
+from app.api.common import redirect, render
 from app.core.auth import require_user
 from app.core.db import get_db
+from app.core.keys import load_llm_config
 from app.core.models import Clip, User, utcnow
 from app.core.paths import find_source, project_output, safe_child
-from app.core.store import FRAMING_MODES, get_clip_for, get_project_for, user_settings
+from app.core.store import CAPTION_STYLES, FRAMING_MODES, get_clip_for, get_project_for, user_settings
 from app.estimation.estimator import viral_score
 from app.estimation.features import compute_features
-from app.core.keys import load_llm_config
 from app.estimation.service import clip_estimate
+from app.pipeline import captions, framing
 from app.pipeline.copywriting import generate_post_texts, normalize_hashtags
 from app.pipeline.errors import LLMError
+from app.pipeline.facecam import parse_box
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript, write_clips_json
 from app.pipeline.transcribe import all_words
 from app.worker import queue
@@ -110,6 +112,7 @@ def trim(cid: int, start: str = Form(...), end: str = Form(...), user: User = De
     s, e = _parse_time(start), _parse_time(end)
     _validate_range(clip.project, s, e)
     clip.start, clip.end = round(s, 2), round(e, 2)
+    clip.captions_json = None  # eigen ondertitelregels horen bij de oude tijden
     _rescore(clip)
     msg = _queue_render(db, clip)
     return redirect(_back(clip), msg)
@@ -134,6 +137,88 @@ def set_framing(
         except ValueError as exc:
             raise HTTPException(400, "Ongeldige positie.") from exc
     return redirect(_back(clip), _queue_render(db, clip))
+
+
+@router.get("/clips/{cid}/edit")
+def clip_editor(request: Request, cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    clip = get_clip_for(db, user, cid)
+    project = clip.project
+    transcript = load_transcript(project.id) or {"segments": []}
+    groups = clip.custom_captions or captions.default_groups(all_words(transcript), clip.start, clip.end)
+    layout = framing.validate_layout(clip.layout) or framing.validate_layout(clip.auto_layout)
+    box = parse_box(project.facecam_box)
+    return render(request, "clip_edit.html", {
+        "nav": "dashboard",
+        "clip": clip,
+        "project": project,
+        "has_source": find_source(project.id) is not None,
+        "frame_t": round(clip.start + min(1.0, clip.duration / 2), 2),
+        "layout_mode": (clip.layout or {}).get("type") if clip.layout else "auto",
+        "layout_json": json.dumps(layout) if layout else "",
+        "facecam_json": json.dumps(list(box)) if box else "",
+        "groups": groups,
+        "opts": captions.merge_opts(clip.caption_opts, project.caption_style),
+        "caption_styles": CAPTION_STYLES,
+        "positions": captions.POSITIONS,
+        "src_w": project.width or 1920,
+        "src_h": project.height or 1080,
+    })
+
+
+@router.post("/clips/{cid}/editor")
+async def save_editor(request: Request, cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    clip = get_clip_for(db, user, cid)
+    form = await request.form()
+    # indeling
+    mode = form.get("layout_mode", "auto")
+    if mode == "auto":
+        clip.layout_json = None
+    elif mode in ("split", "crop"):
+        try:
+            layout = framing.validate_layout(json.loads(form.get("layout_json") or "null"))
+        except ValueError:
+            layout = None
+        if layout is None or layout["type"] != mode:
+            raise HTTPException(400, "Teken eerst de vakken op het beeld.")
+        clip.layout_json = json.dumps(layout)
+        clip.framing_choice = mode
+    else:
+        raise HTTPException(400, "Onbekende indeling.")
+    # ondertitelstijl
+    color = form.get("cap_color", "")
+    opts = {
+        "pos": form.get("cap_pos", 72),
+        "size": form.get("cap_size", "M"),
+        "color": color if color in CAPTION_STYLES else None,
+        "upper": form.get("cap_upper") in ("1", "on", "true"),
+    }
+    clip.caption_opts_json = json.dumps(captions.merge_opts(opts, clip.project.caption_style))
+    clip.captions_enabled = form.get("cap_enabled", "1") in ("1", "on", "true")
+    # ondertitelregels
+    if form.get("reset_captions"):
+        clip.captions_json = None
+    else:
+        transcript = load_transcript(clip.project_id) or {"segments": []}
+        base = clip.custom_captions or captions.default_groups(all_words(transcript), clip.start, clip.end)
+        texts = [t for t in form.getlist("cap_text") if isinstance(t, str)]
+        if len(texts) != len(base):
+            raise HTTPException(400, "De ondertitels zijn intussen veranderd. Herlaad de pagina en probeer opnieuw.")
+        new, changed = [], False
+        for g, t in zip(base, texts):
+            t = " ".join(t.split())[:300]
+            if not t:
+                changed = True
+                continue
+            if t == g["text"]:
+                new.append(g)
+            else:
+                changed = True
+                new.append(captions.retime(g, t))
+        if changed or clip.captions_json:
+            clip.captions_json = json.dumps(new, ensure_ascii=False)
+    db.commit()
+    msg = _queue_render(db, clip)
+    return redirect(f"/projects/{clip.project_id}#clip-{clip.id}", "Bewerkingen opgeslagen. " + msg)
 
 
 @router.post("/clips/{cid}/rerender")

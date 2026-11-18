@@ -149,17 +149,29 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
     try:
         mode = clip.framing_choice or project.framing or "auto"
         cmd_name = f"{base}_crop.cmd"
-        fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end,
-                                    force_mode=mode, face_x=clip.crop_x, cmd_file=cmd_name,
-                                    facecam_box=parse_box(project.facecam_box))
-        project.set_clip_warning(clip.index, SPLIT_NOTES.get(fr.note) if mode == "split" else None)
+        layout = framing.validate_layout(clip.layout)
+        if layout is not None:  # eigen indeling uit de editor
+            fr = framing.Framing(layout["type"], framing.layout_filter(info["width"], info["height"], layout), 1.0, None)
+            project.set_clip_warning(clip.index, None)
+        else:
+            fr = framing.choose_framing(source, info["width"], info["height"], clip.start, clip.end,
+                                        force_mode=mode, face_x=clip.crop_x, cmd_file=cmd_name,
+                                        facecam_box=parse_box(project.facecam_box))
+            project.set_clip_warning(clip.index, SPLIT_NOTES.get(fr.note) if mode == "split" else None)
+            auto = fr.layout
+            if auto is None and fr.mode == "crop" and fr.face_x is not None:
+                cw, ch = framing.crop_size(info["width"], info["height"])
+                x = max(0.0, min(1 - cw / info["width"], fr.face_x - cw / info["width"] / 2))
+                auto = {"type": "crop", "rect": [round(x, 4), 0.0, round(cw / info["width"], 4), 1.0]}
+            clip.auto_layout_json = json.dumps(auto) if auto else None
         cmd_path = out_dir / cmd_name
         if fr.commands:
             cmd_path.write_text(fr.commands)
         else:
             cmd_path.unlink(missing_ok=True)
         clip.framing_mode = fr.mode
-        captions.write_ass(ass, words, clip.start, clip.end, project.caption_style)
+        captions.write_ass(ass, words, clip.start, clip.end, project.caption_style,
+                           clip.caption_opts or None, clip.custom_captions)
         clip.ass_path = ass.name
         for p in (final,):
             if p.exists():

@@ -27,6 +27,7 @@ class Framing:
     face_x: float | None = None  # (mediane) gezichtsmidden, als fractie van de breedte
     commands: str | None = None  # sendcmd-inhoud voor een meebewegende uitsnede
     note: str | None = None  # bij Gesplitst: geschat | webcam-shot | geen facecam | geen gezicht
+    layout: dict | None = None  # gebruikte indeling (fracties), startpunt voor de editor
 
 
 # ---------------------------------------------------------------- detectoren
@@ -358,6 +359,78 @@ def estimate_facecam(face: tuple[float, float, float], src_w: int, src_h: int) -
     return (max(0.0, x) / src_w, max(0.0, y) / src_h, min(1.0, w_px / src_w), min(1.0, h_px / src_h))
 
 
+def _fit(rect, src_w: int, src_h: int, aspect: float) -> tuple[int, int, int, int]:
+    """Rechthoek (fracties) naar bronpixels, binnen het beeld, bijgesneden tot de doelverhouding (gecentreerd)."""
+    x, y, w, h = (max(0.0, min(1.0, float(v))) for v in rect)
+    px, py, pw, ph = x * src_w, y * src_h, max(8.0, w * src_w), max(8.0, h * src_h)
+    if pw / ph > aspect:
+        nw = ph * aspect
+        px += (pw - nw) / 2
+        pw = nw
+    else:
+        nh = pw / aspect
+        py += (ph - nh) / 2
+        ph = nh
+    pw, ph = _even(min(pw, src_w)), _even(min(ph, src_h))
+    px = max(0, min(src_w - pw, int(px))) // 2 * 2
+    py = max(0, min(src_h - ph, int(py))) // 2 * 2
+    return pw, ph, px, py
+
+
+def split_heights(top: float) -> tuple[int, int]:
+    top_h = _even(OUT_H * max(0.2, min(0.6, float(top))))
+    return top_h, OUT_H - top_h
+
+
+def layout_filter(src_w: int, src_h: int, layout: dict) -> str:
+    """ffmpeg-filter voor een eigen indeling uit de editor."""
+    if layout.get("type") == "split":
+        top_h, bot_h = split_heights(layout.get("top", SPLIT_TOP_H / OUT_H))
+        cw, ch, cx, cy = _fit(layout["cam"], src_w, src_h, OUT_W / top_h)
+        gw, gh, gx, gy = _fit(layout["game"], src_w, src_h, OUT_W / bot_h)
+        return (
+            "[0:v]split=2[cam][game];"
+            f"[cam]crop={cw}:{ch}:{cx}:{cy},scale={OUT_W}:{top_h},setsar=1[top];"
+            f"[game]crop={gw}:{gh}:{gx}:{gy},scale={OUT_W}:{bot_h},setsar=1[bot];"
+            "[top][bot]vstack=inputs=2,fps=30[v]"
+        )
+    w, h, x, y = _fit(layout["rect"], src_w, src_h, OUT_W / OUT_H)
+    return f"[0:v]crop={w}:{h}:{x}:{y},scale={OUT_W}:{OUT_H},setsar=1,fps=30[v]"
+
+
+def validate_layout(data) -> dict | None:
+    """Controleer een indeling uit de browser. Geeft een schone dict of None."""
+    def rect(v):
+        if not isinstance(v, (list, tuple)) or len(v) != 4:
+            return None
+        try:
+            x, y, w, h = (float(a) for a in v)
+        except (TypeError, ValueError):
+            return None
+        if w < 0.02 or h < 0.02 or x < -0.001 or y < -0.001 or x + w > 1.001 or y + h > 1.001:
+            return None
+        return [round(x, 4), round(y, 4), round(w, 4), round(h, 4)]
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("type") == "split":
+        cam, game = rect(data.get("cam")), rect(data.get("game"))
+        try:
+            top = max(0.2, min(0.6, float(data.get("top", 0.35))))
+        except (TypeError, ValueError):
+            return None
+        return {"type": "split", "cam": cam, "game": game, "top": round(top, 3)} if cam and game else None
+    if data.get("type") == "crop":
+        r = rect(data.get("rect"))
+        return {"type": "crop", "rect": r} if r else None
+    return None
+
+
+def _px_to_frac(region, src_w, src_h):
+    w, h, x, y = region
+    return [round(x / src_w, 4), round(y / src_h, 4), round(w / src_w, 4), round(h / src_h, 4)]
+
+
 MODES = ("auto", "crop", "blur", "split")
 BIG_FACE = 0.16  # gezicht breder dan dit deel van het beeld = geen facecam-overlay maar een webcam-shot
 
@@ -428,8 +501,11 @@ def choose_framing(
                 note = "geschat"
         if cam is not None:
             fpos = face[:2] if face and cam[0] <= face[0] <= cam[0] + cam[2] and cam[1] <= face[1] <= cam[1] + cam[3] else None
+            cam_px, game_px = split_regions(src_w, src_h, cam, fpos, game_x)
             return Framing("split", split_filter(src_w, src_h, cam, fpos, game_x), max(ratio, 0.0), cam[0] + cam[2] / 2,
-                           note=note)
+                           note=note, layout={"type": "split", "cam": _px_to_frac(cam_px, src_w, src_h),
+                                              "game": _px_to_frac(game_px, src_w, src_h),
+                                              "top": round(SPLIT_TOP_H / OUT_H, 3)})
         if hits and face is not None and face[2] > BIG_FACE:
             # groot gezicht zonder overlay: een webcam-shot -> vullen en volgen
             fr = _tracked(src_w, src_h, track, cmd_file, ratio)

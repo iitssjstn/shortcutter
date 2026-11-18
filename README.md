@@ -153,6 +153,11 @@ bestaande sleutels niet meer ontsleuteld worden en moet je ze opnieuw invullen.
   staat (bijna) stil en heeft vaste randen. Klopt het niet, sleep dan op de projectpagina bij "Facecam aanwijzen" een
   rechthoek om de facecam; dat geldt voor alle clips. Is er geen facecam-overlay (bijv. een schermvullende
   webcam-shot), dan wordt het beeld gevuld en volgt het het gezicht.
+- **Clip zelf bewerken**: via "✎ Indeling & ondertitels" op een clip open je de editor. Teken op een stilstaand
+  beeld het facecam- en gameplay-vak (of één uitsnede bij "Vullen"); de facecam-hoogte past zich aan je facecam aan
+  en een live voorbeeld toont de short. Daaronder verbeter je de ondertitelregels en kies je positie (ook "op de
+  naad" tussen facecam en gameplay), grootte, kleur en hoofdletters. Opslaan rendert de clip opnieuw; de
+  `.srt`/`.ass`-downloads krijgen de verbeterde tekst. Na trimmen gelden weer de ondertitels uit het transcript.
 - **Render mislukt**: de ruwe ge-cropte versie en de `.ass` blijven downloadbaar; klik op *Opnieuw renderen*.
 - **yt-dlp verouderd**: elke image-build haalt de nieuwste yt-dlp. Start de workflow handmatig
   (Actions → Docker image → Run workflow) en doe daarna `docker compose pull && docker compose up -d`.

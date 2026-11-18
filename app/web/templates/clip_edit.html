@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Clip bewerken{% endblock %}
+{% block content %}
+<p><a href="/projects/{{ project.id }}#clip-{{ clip.id }}" class="muted">← Terug naar het project</a></p>
+<div class="page-head">
+  <div style="min-width:0">
+    <h1>Clip {{ clip.index }} bewerken</h1>
+    <p class="muted">{{ clip.title }} · {{ clip.start|ts }} – {{ clip.end|ts }} ({{ '%.0f'|format(clip.duration) }} s)</p>
+  </div>
+</div>
+
+{% if not has_source %}
+<div class="flash flash-warn">Het bronbestand is niet (meer) beschikbaar. Upload het opnieuw op de projectpagina om de indeling te kunnen aanpassen en opnieuw te renderen.</div>
+{% endif %}
+
+<form method="post" action="/clips/{{ clip.id }}/editor" id="clip-editor">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="layout_json" id="layout-json" value="{{ layout_json }}">
+
+  <div class="editor-grid">
+    <div>
+      <section class="card">
+        <h2>1. Indeling</h2>
+        <div class="row" style="margin-bottom:.6rem">
+          <label for="layout-mode" style="margin:0">Soort</label>
+          <select id="layout-mode" name="layout_mode" style="width:auto">
+            <option value="auto" {% if layout_mode == 'auto' %}selected{% endif %}>Automatisch (zoals het project)</option>
+            <option value="split" {% if layout_mode == 'split' %}selected{% endif %}>Gesplitst: facecam boven, gameplay onder</option>
+            <option value="crop" {% if layout_mode == 'crop' %}selected{% endif %}>Vullen: één uitsnede</option>
+          </select>
+        </div>
+        <div class="le-tools" data-for="split">
+          <span class="muted" style="font-size:.85rem">Teken of versleep:</span>
+          <label class="le-pick cam"><input type="radio" name="le-target" value="cam" checked> Facecam-vak</label>
+          <label class="le-pick game"><input type="radio" name="le-target" value="game"> Gameplay-vak</label>
+          <label style="margin:0;font-weight:500" class="row">Facecam-hoogte
+            <input type="range" id="le-top" min="20" max="60" step="1" value="35" style="width:140px"> <span id="le-top-val">35%</span></label>
+        </div>
+        <p class="hint le-help">Sleep over het beeld om een vak te tekenen; sleep binnen een vak om het te verplaatsen. Na het tekenen van de facecam past de hoogte zich daaraan aan. Het gestippelde deel komt in de short; past een vak niet precies, dan wordt in het midden bijgesneden (er wordt nooit iets uitgerekt).</p>
+        <div class="le-stage" id="le-stage"
+             data-src-w="{{ src_w }}" data-src-h="{{ src_h }}" data-facecam="{{ facecam_json }}">
+          {% if has_source %}<img id="le-img" src="/projects/{{ project.id }}/frame.jpg?t={{ frame_t }}" alt="Stilstaand beeld uit de clip" draggable="false">{% endif %}
+          <div class="le-rect cam" data-k="cam"><span>facecam</span></div>
+          <div class="le-rect game" data-k="game"><span>gameplay</span></div>
+          <div class="le-rect crop" data-k="rect"><span>uitsnede</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. Ondertitels</h2>
+        <label class="row" style="font-weight:500;margin-bottom:.6rem"><input type="checkbox" name="cap_enabled" value="1" {% if clip.captions_enabled %}checked{% endif %}> Ondertitels in de video branden</label>
+        <div class="grid-2">
+          <div class="field"><label for="cap-pos">Positie</label>
+            <div class="row">
+              {% for name, v in positions.items() %}<button type="button" class="btn btn-sm" data-cap-pos="{{ v }}">{{ name }}</button>{% endfor %}
+            </div>
+            <input type="range" id="cap-pos" name="cap_pos" min="5" max="95" value="{{ opts.pos }}" style="width:100%;margin-top:.4rem">
+          </div>
+          <div>
+            <div class="row">
+              <div class="field" style="flex:1"><label for="cap-size">Grootte</label>
+                <select id="cap-size" name="cap_size">{% for k, l in [('S','Klein'),('M','Normaal'),('L','Groot')] %}<option value="{{ k }}" {% if opts.size == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+              <div class="field" style="flex:1"><label for="cap-color">Kleur</label>
+                <select id="cap-color" name="cap_color">{% for k, l in caption_styles.items() %}<option value="{{ k }}" {% if opts.color == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+            </div>
+            <label class="row" style="font-weight:500"><input type="checkbox" id="cap-upper" name="cap_upper" value="1" {% if opts.upper %}checked{% endif %}> HOOFDLETTERS</label>
+          </div>
+        </div>
+        <p class="hint">Verbeter hieronder de tekst per regel. Een lege regel wordt verwijderd. Bij gewijzigde tekst worden de woorden gelijkmatig over de tijd van de regel verdeeld.</p>
+        <div class="cap-list">
+          {% for g in groups %}
+          <div class="cap-row"><span class="t">{{ g.start|ts }}</span><input type="text" name="cap_text" value="{{ g.text }}" aria-label="Ondertitel op {{ g.start|ts }}"></div>
+          {% else %}
+          <p class="muted">Er is geen transcript voor deze clip.</p>
+          {% endfor %}
+        </div>
+        {% if clip.custom_captions %}
+        <button class="linklike" type="submit" name="reset_captions" value="1" style="margin-top:.5rem">Ondertitels terugzetten naar het transcript</button>
+        {% endif %}
+      </section>
+    </div>
+
+    <aside class="editor-preview">
+      <div class="card">
+        <h2>Voorbeeld</h2>
+        <canvas id="le-preview" width="270" height="480" aria-label="Voorbeeld van de short"></canvas>
+        <p class="hint">Stilstaand voorbeeld; de echte clip wordt na opslaan opnieuw gerenderd.</p>
+        <button class="btn btn-primary btn-block" type="submit" {% if not has_source %}disabled{% endif %}>Opslaan en opnieuw renderen</button>
+      </div>
+      {% if clip.file_path or clip.raw_path %}
+      <div class="card">
+        <h2>Huidige versie</h2>
+        <video src="/clips/{{ clip.id }}/video" controls preload="metadata" playsinline style="width:100%;border-radius:8px;background:#000"></video>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</form>
+{% endblock %}
