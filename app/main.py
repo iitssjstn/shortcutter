@@ -20,7 +20,7 @@ from app.core.setup import ensure_setup_code, has_users, reset_cache
 log = logging.getLogger("shortcutter")
 
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
-SETUP_EXEMPT = ("/setup", "/static/", "/healthz", "/favicon.ico")
+SETUP_EXEMPT = ("/setup", "/static/", "/healthz", "/favicon.ico", "/privacy", "/voorwaarden")
 
 CSP = (
     "default-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://clips-media-assets2.twitch.tv; media-src 'self'; style-src 'self' 'unsafe-inline'; "

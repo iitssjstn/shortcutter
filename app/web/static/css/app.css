@@ -169,6 +169,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cap-row { display: grid; grid-template-columns: 3.5rem 1fr; gap: .5rem; align-items: center; }
 .cap-row .t { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
 .cap-row input { padding: .35rem .5rem; font-size: .9rem; }
+.legal h2 { margin-top: 1.4rem; }
+.legal ul, .legal ol { padding-left: 1.2rem; }
+.legal li { margin-bottom: .35rem; }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .copybox { display: flex; gap: .5rem; }
 .copybox input { font-family: ui-monospace, monospace; font-size: .85rem; }

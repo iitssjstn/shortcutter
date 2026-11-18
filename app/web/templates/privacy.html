@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Privacybeleid{% endblock %}
+{% block content %}
+<article class="card legal" style="max-width:780px;margin:0 auto">
+  <h1>Privacybeleid</h1>
+  <p class="muted">Shortcutter is een zelf-gehoste webapp die video's omzet in korte verticale clips. Deze installatie draait op een server van de beheerder van {{ host }} en is alleen toegankelijk voor uitgenodigde gebruikers.</p>
+
+  <h2>Welke gegevens we opslaan</h2>
+  <ul>
+    <li><strong>Account:</strong> gebruikersnaam, optioneel e-mailadres en een versleutelde (argon2id) hash van je wachtwoord.</li>
+    <li><strong>Projecten:</strong> de video's die je uploadt of laat downloaden, de transcripties, de gemaakte clips en de teksten en statistieken die je invult.</li>
+    <li><strong>Gekoppelde diensten:</strong> als je een YouTube-kanaal koppelt, slaan we het kanaal-ID, de kanaalnaam en de OAuth-tokens op. Tokens en API-sleutels worden versleuteld opgeslagen.</li>
+    <li><strong>Technisch:</strong> sessiecookies (om ingelogd te blijven) en een CSRF-cookie (beveiliging). Er zijn geen tracking- of advertentiecookies.</li>
+  </ul>
+
+  <h2>YouTube API Services</h2>
+  <p>Shortcutter gebruikt de YouTube API Services. Met een gekoppeld kanaal gebruikt Shortcutter alleen deze rechten:</p>
+  <ul>
+    <li><code>youtube.upload</code>: om video's te uploaden, uitsluitend wanneer jij daar in Shortcutter zelf om vraagt (direct of ingepland);</li>
+    <li><code>youtube.readonly</code>: om de naam van je gekoppelde kanaal te tonen.</li>
+  </ul>
+  <p>We lezen of wijzigen niets anders op je kanaal en delen je YouTube-gegevens met niemand. Door YouTube-functies te gebruiken ga je akkoord met de
+    <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">Servicevoorwaarden van YouTube</a> en het
+    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacybeleid van Google</a>.</p>
+  <p>Je kunt de toegang op elk moment intrekken via <em>Mijn account → Ontkoppelen</em> in Shortcutter, of via de
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">beveiligingsinstellingen van je Google-account</a>.
+    Bij ontkoppelen trekken we het token ook bij Google in en verwijderen we de opgeslagen tokens.</p>
+
+  <h2>Externe diensten</h2>
+  <p>Afhankelijk van de instellingen van de beheerder stuurt Shortcutter gegevens naar: een LLM-aanbieder (tekst van transcripties, om fragmenten en posttekst te kiezen), YouTube/Google (downloads, kanaalstatistieken, uploads) en Twitch (openbare clipgegevens). Er wordt nooit een wachtwoord naar een externe dienst gestuurd.</p>
+
+  <h2>Bewaren en verwijderen</h2>
+  <p>Bronvideo's worden na de door de beheerder ingestelde periode automatisch verwijderd. Je kunt projecten en clips zelf verwijderen. Wil je je account en alle gegevens laten verwijderen, vraag dat dan aan de beheerder van deze installatie.</p>
+
+  <h2>Contact</h2>
+  <p>Vragen over je gegevens? Neem contact op met de beheerder van {{ host }}.</p>
+  <p class="muted" style="font-size:.85rem">Zie ook de <a href="/voorwaarden">gebruiksvoorwaarden</a>.</p>
+</article>
+{% endblock %}

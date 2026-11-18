@@ -74,3 +74,11 @@ def test_setup_race_unique_constraint(app):
         db3.commit()
     for d in (db1, db2, db3):
         d.close()
+
+
+def test_legal_pages_public(client):
+    # ook vóór de setup en zonder login bereikbaar (Google controleert deze links)
+    for path, text in (("/privacy", "YouTube API Services"), ("/voorwaarden", "Gebruiksvoorwaarden")):
+        r = client.get(path)
+        assert r.status_code == 200 and text in r.text
+    assert "policies.google.com/privacy" in client.get("/privacy").text

@@ -30,6 +30,17 @@ def valid_username(name: str) -> str | None:
 
 
 # ---------------------------------------------------------------- login
+@router.get("/privacy")
+def privacy_page(request: Request, user=Depends(A.optional_user)):
+    """Openbaar privacybeleid (o.a. vereist door Google voor de YouTube-koppeling)."""
+    return render(request, "privacy.html", {"host": request.url.hostname or "deze server"})
+
+
+@router.get("/voorwaarden")
+def terms_page(request: Request, user=Depends(A.optional_user)):
+    return render(request, "terms.html", {"host": request.url.hostname or "deze server"})
+
+
 @router.get("/login")
 def login_page(request: Request, next: str = "/", user=Depends(A.optional_user)):
     if user:
