@@ -50,12 +50,15 @@
     <div class="ed-timeline">
       <input type="range" id="ed-seek" min="0" max="{{ '%.2f'|format(clip.duration) }}" step="0.01" value="0" aria-label="Positie in de clip">
       <div class="ed-controls">
-        <button type="button" class="btn btn-sm" id="ed-play" aria-label="Afspelen">▶</button>
-        <button type="button" class="btn btn-sm" id="ed-mute" aria-label="Geluid aan">🔇</button>
-        <span class="ed-time" id="ed-time">0:00 / {{ clip.duration|ts }}</span>
-        <span></span>
-        <a class="btn" href="/projects/{{ project.id }}#clip-{{ clip.id }}">Annuleren</a>
-        <button class="btn btn-primary" type="submit">Opslaan</button>
+        <div class="ed-player">
+          <button type="button" class="btn btn-sm" id="ed-play" aria-label="Afspelen">▶</button>
+          <button type="button" class="btn btn-sm" id="ed-mute" aria-label="Geluid aan">🔇</button>
+          <span class="ed-time" id="ed-time">0:00 / {{ clip.duration|ts }}</span>
+        </div>
+        <div class="ed-actions">
+          <a class="btn" href="/projects/{{ project.id }}#clip-{{ clip.id }}">Annuleren</a>
+          <button class="btn btn-primary" type="submit">Opslaan</button>
+        </div>
       </div>
     </div>
   </section>
@@ -90,9 +93,9 @@
     {% if clip.custom_captions %}
     <button class="linklike" type="submit" name="reset_captions" value="1" style="margin-top:.5rem">Ondertitels terugzetten naar het transcript</button>
     {% endif %}
-    <div class="ed-savebar">
+    <div class="ed-actions ed-savebar">
       <a class="btn" href="/projects/{{ project.id }}#clip-{{ clip.id }}">Annuleren</a>
-      <button class="btn btn-primary" type="submit">Opslaan en opnieuw renderen</button>
+      <button class="btn btn-primary" type="submit">Opslaan</button>
     </div>
   </section>
 </form>

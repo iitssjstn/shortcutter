@@ -202,14 +202,17 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ed-mode-auto { grid-column: 1 / -1; border-radius: 8px; font-weight: 500; font-size: .85rem; }
 .ed-timeline { margin-top: 1rem; display: grid; gap: .6rem; }
 .ed-timeline input[type=range] { width: 100%; accent-color: var(--accent); }
-.ed-controls { display: grid; grid-template-columns: auto auto auto 1fr auto auto; gap: .5rem; align-items: center; }
-.ed-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.ed-controls { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: center; }
+.ed-player { display: grid; grid-template-columns: 40px 40px auto; gap: .5rem; align-items: center; }
+.ed-player .btn { width: 40px; height: 36px; padding: 0; }
+.ed-actions { display: grid; grid-template-columns: repeat(2, minmax(110px, auto)); gap: .5rem; }
+.ed-actions .btn { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ed-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85rem; white-space: nowrap; }
 .ed-capopts { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: .75rem; align-items: end; }
 .ed-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: .35rem; margin-bottom: .4rem; }
 .ed-capopts input[type=range] { width: 100%; }
 .cap-row .t.linklike { text-decoration: none; font-variant-numeric: tabular-nums; text-align: left; }
-.ed-savebar { display: grid; grid-template-columns: 1fr auto auto; gap: .5rem; margin-top: 1rem; }
-.ed-savebar > :first-child { grid-column: 2; }
+.ed-savebar { justify-content: end; margin-top: 1rem; }
 
 /* clips als uitklapbare lijst */
 .clip-list { display: grid; gap: .6rem; }
@@ -276,8 +279,8 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
   .twitch-layout { grid-template-columns: 1fr; }
   .ed-panes { grid-template-columns: 1fr; }
   .ed-port { max-width: 320px; width: 100%; justify-self: center; }
-  .ed-controls { grid-template-columns: auto auto 1fr auto auto; }
-  .ed-controls > span:nth-of-type(2) { display: none; }
+  .ed-controls { grid-template-columns: 1fr; }
+  .ed-actions { grid-template-columns: 1fr 1fr; justify-content: stretch; }
   .ed-capopts { grid-template-columns: 1fr 1fr; }
   .ed-capopts > .field:first-child { grid-column: 1 / -1; }
   .clip-head { grid-template-columns: 40px minmax(0, 1fr); }
