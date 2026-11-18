@@ -95,6 +95,19 @@ def write_clips_json(db: Session, project: Project) -> Path:
     return path
 
 
+START_PAD = 0.2  # s eerder beginnen: de eerste klank niet afkappen
+END_PAD = 0.6  # s langer doorlopen: laatste woord en een korte reactie erna niet afkappen
+
+
+def pad_clip(start: float, end: float, total: float | None) -> tuple[float, float]:
+    """Kleine marge rond een automatisch gekozen fragment (woordtijden van Whisper zijn soms krap)."""
+    s = max(0.0, start - START_PAD)
+    e = end + END_PAD
+    if total:
+        e = min(total, e)
+    return round(s, 2), round(max(e, s + 0.5), 2)
+
+
 SPLIT_NOTES = {
     "geschat": "facecam-kader geschat (niet zeker herkend). Klopt het niet? Wijs de facecam aan bij 'Facecam aanwijzen'.",
     "webcam-shot": "geen facecam-overlay maar een schermvullende webcam; gevuld in plaats van gesplitst.",
@@ -250,7 +263,9 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
 
         # 3. fragmentkeuze (alleen als er nog geen clips zijn, bv. bij opnieuw proberen)
         dur = info.get("duration") or 0
-        if not project.clips and 1.0 < dur <= project.max_dur + 0.5:
+        # korte bron, of een Twitch-clip (max ±60 s): altijd in zijn geheel, ongeacht de max. duur
+        whole = 1.0 < dur <= project.max_dur + 0.5 or (project.source_type == "twitch" and 1.0 < dur <= 120)
+        if not project.clips and whole:
             db.add(Clip(
                 project_id=project.id, owner_id=project.owner_id, index=1, start=0.0, end=round(dur, 2),
                 title=(project.title or "Clip")[:120], hook="", reason="Korte bron: in zijn geheel gebruikt.",
@@ -279,13 +294,14 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
             if not picked:
                 project.add_warning("Er zijn geen geschikte fragmenten gevonden. Voeg handmatig een clip toe.")
             for i, c in enumerate(picked, 1):
+                c_start, c_end = pad_clip(c["start"], c["end"], dur)
                 db.add(
                     Clip(
                         project_id=project.id,
                         owner_id=project.owner_id,
                         index=i,
-                        start=c["start"],
-                        end=c["end"],
+                        start=c_start,
+                        end=c_end,
                         title=c["title"],
                         hook=c["hook"],
                         reason=c["reason"],

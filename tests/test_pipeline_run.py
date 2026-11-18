@@ -315,3 +315,35 @@ def test_parse_box():
     assert parse_box(format_box((0.1, 0.2, 0.3, 0.4))) == (0.1, 0.2, 0.3, 0.4)
     for bad in (None, "", "a,b,c,d", "0.9,0.9,0.5,0.5", "0,0,0,0.5", "-0.1,0,0.5,0.5"):
         assert parse_box(bad) is None
+
+
+def test_pad_clip():
+    assert run_mod.pad_clip(10.0, 20.0, 60.0) == (9.8, 20.6)
+    assert run_mod.pad_clip(0.1, 59.9, 60.0) == (0.0, 60.0)
+
+
+def test_long_twitch_clip_used_whole(admin_client, settings, sample_video, monkeypatch):
+    """Een Twitch-clip langer dan de max. duur wordt niet ingekort."""
+    import shutil as _sh
+
+    def fake_download(url, out_dir, cookies):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / "source.mp4"
+        _sh.copy(sample_video, dest)
+        return dest, {"title": "clip"}
+
+    monkeypatch.setattr(run_mod, "download", fake_download)
+    monkeypatch.setattr(run_mod, "transcribe", _fake_transcribe)
+    # max. duur (5 s) korter dan de clip (8 s)
+    admin_client.post("/projects", data={"url": "https://www.twitch.tv/streamer/clip/Abc-1",
+                                         "num_clips": "3", "min_dur": "5", "max_dur": "10"})
+    db = new_session()
+    p = db.scalars(select(Project)).one()
+    p.max_dur = 5
+    db.commit()
+    db.close()
+    run_job_once()
+    db = new_session()
+    clips = db.scalars(select(Clip)).all()
+    assert len(clips) == 1 and clips[0].start == 0.0 and clips[0].end == pytest.approx(8.0, abs=0.2)
+    db.close()
