@@ -218,7 +218,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .clip-list { display: grid; gap: .6rem; }
 .clip-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; scroll-margin-top: 80px; }
 .clip-row.selected { outline: 2px solid var(--accent); }
-.clip-head { display: grid; grid-template-columns: 48px minmax(0, 1fr); }
+.clip-head { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; }
+.clip-edit-btn { margin: 0 1rem 0 .25rem; white-space: nowrap; }
 .clip-check-wrap { display: grid; place-items: center; margin: 0; cursor: pointer; border-right: 1px solid var(--border); }
 .clip-check-wrap input { width: 18px; height: 18px; }
 .clip-toggle { display: grid; grid-template-columns: 54px minmax(0, 1fr) 70px 150px 120px 22px; gap: 1rem; align-items: center;
@@ -284,6 +285,7 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
   .ed-capopts { grid-template-columns: 1fr 1fr; }
   .ed-capopts > .field:first-child { grid-column: 1 / -1; }
   .clip-head { grid-template-columns: 40px minmax(0, 1fr); }
+  .clip-edit-btn { grid-column: 1 / -1; margin: 0 .6rem .6rem; }
   .clip-toggle { grid-template-columns: 44px minmax(0, 1fr) auto 18px; gap: .6rem; padding: .5rem .6rem; }
   .clip-toggle .clip-num { display: none; }
   .clip-thumb { width: 44px; height: 78px; }
