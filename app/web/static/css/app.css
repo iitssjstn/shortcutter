@@ -438,3 +438,26 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
   .rv-actions { grid-template-columns: 1fr 1fr; }
   .rv-bulk { grid-template-columns: 1fr; }
 }
+
+/* ---------- accountmenu rechtsboven ---------- */
+.usermenu { position: relative; margin-left: auto; }
+.usermenu > summary { font-size: .9rem; list-style: none; cursor: pointer; display: grid; grid-auto-flow: column; align-items: center; gap: .4rem;
+  padding: .4rem .7rem; border: 1px solid var(--border); border-radius: 8px; white-space: nowrap; font-weight: 500; color: var(--text); }
+.usermenu > summary::-webkit-details-marker { display: none; }
+.usermenu > summary::marker { content: ""; }
+.usermenu > summary::before, .usermenu[open] > summary::before { content: none; }
+.usermenu > summary:hover, .usermenu[open] > summary { background: var(--surface-2); }
+.usermenu > summary.active { border-color: var(--accent); }
+.usermenu .caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; opacity: .7; }
+.usermenu-list { position: absolute; right: 0; top: calc(100% + 6px); min-width: 200px; display: grid; padding: .35rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); z-index: 20; }
+.usermenu-list a, .usermenu-list button { display: block; width: 100%; text-align: left; padding: .5rem .7rem; border-radius: 7px;
+  color: var(--text); text-decoration: none; font: inherit; font-weight: 500; background: none; border: 0; cursor: pointer; }
+.usermenu-list a:hover, .usermenu-list button:hover { background: var(--surface-2); }
+.usermenu-list a.active { color: var(--accent); }
+.usermenu-list form { margin: .25rem 0 0; padding-top: .25rem; border-top: 1px solid var(--border); }
+.usermenu-list button { color: var(--err); }
+@media (max-width: 860px) {
+  .usermenu { order: 2; }
+  .usermenu .who { display: inline; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+}

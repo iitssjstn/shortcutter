@@ -469,3 +469,13 @@ document.addEventListener("change", function (e) {
     document.querySelectorAll(".rv-sel").forEach(function (cb) { cb.checked = e.target.checked; });
   }
 });
+
+// ---------- accountmenu: sluiten bij klik ernaast of Escape ----------
+document.addEventListener("click", function (e) {
+  document.querySelectorAll("details.usermenu[open]").forEach(function (d) {
+    if (!d.contains(e.target)) d.removeAttribute("open");
+  });
+});
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") document.querySelectorAll("details.usermenu[open]").forEach(function (d) { d.removeAttribute("open"); });
+});
