@@ -24,7 +24,7 @@ SETUP_EXEMPT = ("/setup", "/static/", "/healthz", "/favicon.ico", "/privacy", "/
 
 CSP = (
     "default-src 'self'; img-src 'self' data: https://static-cdn.jtvnw.net https://clips-media-assets2.twitch.tv; media-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    "script-src 'self'; frame-src https://clips.twitch.tv; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 )
 
 

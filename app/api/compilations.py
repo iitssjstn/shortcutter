@@ -20,6 +20,7 @@ from app.core.store import audit
 from app.integrations import twitch
 from app.integrations import youtube_upload as yt
 from app.pipeline import compile as cp
+from app.pipeline import weekly
 from app.pipeline.download import twitch_clip_slug
 
 router = APIRouter()
@@ -39,22 +40,15 @@ def _channels(db: Session, user: User) -> list[TwitchChannel]:
                            .order_by(TwitchChannel.display_name)).all())
 
 
-def _item_from_clip(clip: dict, ch: TwitchChannel, game: str | None, pos: int) -> CompilationItem:
-    return CompilationItem(
-        position=pos, clip_url=clip["url"], slug=clip["id"] or twitch_clip_slug(clip["url"]) or "",
-        title=(clip.get("title") or "Twitch-clip")[:200], streamer=(clip.get("broadcaster_name") or ch.display_name)[:80],
-        channel_login=ch.login, broadcaster_id=ch.broadcaster_id, game=(game or None),
-        views=int(clip.get("views") or 0), duration=float(clip.get("duration") or 0),
-        thumbnail_url=(clip.get("thumbnail") or None),
-    )
-
-
 @router.get("/compilations")
 def list_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     comps = list(db.scalars(select(Compilation).where(Compilation.owner_id == user.id)
                             .order_by(Compilation.created_at.desc())).all())
+    sched = weekly.schedule_for(db, user.id)
+    db.commit()
     return render(request, "compilations.html", {
         "nav": "compilations", "comps": comps, "channels": _channels(db, user),
+        "sched": sched, "weekdays": weekly.WEEKDAYS, "next_run": weekly.next_slot(sched) if sched.enabled else None,
         "has_key": twitch.credential(db) is not None, "periods": twitch.PERIOD_LABELS,
         "counts": COUNTS, "rankings": cp.RANKINGS,
     })
@@ -79,45 +73,61 @@ async def create(request: Request, user: User = Depends(require_user), db: Sessi
                 picked.append(chans[int(v)])
         except (TypeError, ValueError):
             continue
-    if not picked:
-        return redirect("/compilations", "Kies minstens één kanaal uit je lijst.", "error")
-    found: list[tuple[dict, TwitchChannel]] = []
     try:
-        for ch in picked:
-            for clip in twitch.get_clips(db, ch.broadcaster_id, period, first=max(20, count * 2)):
-                if clip.get("broadcaster_id") == ch.broadcaster_id:  # alleen clips van dit (toegestane) kanaal
-                    found.append((clip, ch))
-    except twitch.TwitchError as exc:
+        comp = weekly.build_draft(db, user.id, picked, period, count, ranking)
+    except weekly.DraftError as exc:
         return redirect("/compilations", str(exc), "error")
-    found.sort(key=lambda x: x[0]["views"], reverse=True)
-    seen, top = set(), []
-    for clip, ch in found:
-        if clip["id"] not in seen and clip.get("duration", 0) >= 3:
-            seen.add(clip["id"])
-            top.append((clip, ch))
-        if len(top) >= count:
-            break
-    if len(top) < 2:
-        return redirect("/compilations", "Te weinig clips gevonden in deze periode. Kies een langere periode of meer kanalen.", "error")
-    if ranking == "countdown":
-        top.reverse()  # minst bekeken eerst, #1 als laatste
-    lang = cp._lang(db, user.id)
-    comp = Compilation(owner_id=user.id, period=period, ranking=ranking,
-                       title=cp.default_title(period, [c.get("broadcaster_name", "") for c, _ in top], lang))
-    games: dict[str, str] = {}
-    for k, (clip, ch) in enumerate(top):
-        gid = clip.get("game_id") or ""
-        if gid and gid not in games:
-            try:
-                games[gid] = twitch.get_game_name(db, gid) or ""
-            except twitch.TwitchError:
-                games[gid] = ""
-        comp.items.append(_item_from_clip(clip, ch, games.get(gid), k))
-    db.add(comp)
-    db.commit()
+    top = comp.items
     audit(db, user, "compilatie_aangemaakt", f"#{comp.id} ({len(top)} clips)")
     db.commit()
     return redirect(f"/compilations/{comp.id}", f"{len(top)} clips klaargezet. Pas volgorde en selectie aan en klik op Renderen.")
+
+
+@router.post("/compilations/schedule")
+async def save_schedule(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    form = await request.form()
+    s = weekly.schedule_for(db, user.id)
+    own = {c.id for c in _channels(db, user)}
+    ids = []
+    for v in form.getlist("channel_ids"):
+        try:
+            if int(v) in own:
+                ids.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    enabled = form.get("enabled") in ("1", "on")
+    if enabled and not ids:
+        return redirect("/compilations#weekly", "Kies minstens één kanaal voor de wekelijkse compilatie.", "error")
+    def _int(name, lo, hi, default):
+        try:
+            return max(lo, min(hi, int(form.get(name, default))))
+        except (TypeError, ValueError):
+            return default
+    was_enabled = s.enabled
+    s.enabled = enabled
+    s.channel_ids_json = json.dumps(ids)
+    s.count = _int("count", 2, cp.MAX_ITEMS, 10)
+    r = str(form.get("ranking", "countdown"))
+    s.ranking = r if r in cp.RANKINGS else "countdown"
+    s.weekday = _int("weekday", 0, 6, 0)
+    s.hour = _int("hour", 0, 23, 9)
+    s.intro = form.get("intro") in ("1", "on")
+    s.outro = form.get("outro") in ("1", "on")
+    s.auto_render = form.get("auto_render") in ("1", "on")
+    if enabled and not was_enabled:
+        s.last_run_at = utcnow()  # niet meteen alsnog een gemist moment inhalen; eerstvolgende moment telt
+    db.commit()
+    if form.get("run_now"):
+        if not ids:
+            return redirect("/compilations#weekly", "Kies minstens één kanaal.", "error")
+        comp = weekly.run_schedule(db, s)
+        if comp is None:
+            return redirect("/compilations#weekly", s.last_result or "Geen compilatie gemaakt.", "error")
+        return redirect(f"/compilations/{comp.id}", s.last_result)
+    if enabled:
+        nxt = weekly.next_slot(s)
+        return redirect("/compilations#weekly", f"Wekelijkse compilatie staat aan. Volgende: {weekly.WEEKDAYS[nxt.weekday()]} {nxt:%d-%m} om {nxt:%H:%M}.")
+    return redirect("/compilations#weekly", "Wekelijkse compilatie staat uit.")
 
 
 @router.get("/compilations/{cid}")
@@ -222,7 +232,7 @@ def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user),
             game = twitch.get_game_name(db, clip["game_id"])
         except twitch.TwitchError:
             game = None
-    comp.items.append(_item_from_clip(clip, ch, game, len(comp.items)))
+    comp.items.append(weekly.item_from_clip(clip, ch, game, len(comp.items)))
     comp.updated_at = utcnow()
     db.commit()
     return redirect(f"/compilations/{cid}", "Clip toegevoegd (onderaan).")

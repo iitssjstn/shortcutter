@@ -422,3 +422,43 @@
     if (ed) initClipEditor(ed);
   });
 })();
+
+// ---------- Twitch-clip afspelen in een venster (zonder de pagina te verlaten) ----------
+(function () {
+  var dlg = null;
+  function close() {
+    if (!dlg) return;
+    var f = dlg.querySelector("iframe");
+    if (f) f.remove();  // stopt het afspelen
+    if (dlg.open) dlg.close();
+  }
+  function open(slug, title) {
+    if (!dlg) {
+      dlg = document.createElement("dialog");
+      dlg.className = "tw-dialog";
+      dlg.innerHTML = '<div class="tw-dialog-head"><strong></strong><button type="button" class="btn btn-sm" data-close>Sluiten</button></div><div class="tw-dialog-frame"></div>';
+      document.body.appendChild(dlg);
+      dlg.addEventListener("click", function (e) {
+        if (e.target === dlg || e.target.closest("[data-close]")) close();
+      });
+      dlg.addEventListener("close", close);
+    }
+    dlg.querySelector("strong").textContent = title || "Twitch-clip";
+    var f = document.createElement("iframe");
+    f.src = "https://clips.twitch.tv/embed?clip=" + encodeURIComponent(slug) +
+      "&parent=" + encodeURIComponent(location.hostname) + "&autoplay=true";
+    f.setAttribute("allow", "autoplay; fullscreen");
+    f.allowFullscreen = true;
+    f.title = title || "Twitch-clip";
+    var box = dlg.querySelector(".tw-dialog-frame");
+    box.innerHTML = "";
+    box.appendChild(f);
+    dlg.showModal();
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-twitch-clip]");
+    if (!b) return;
+    e.preventDefault();
+    open(b.getAttribute("data-twitch-clip"), b.getAttribute("data-title"));
+  });
+})();

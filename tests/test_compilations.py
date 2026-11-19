@@ -2,7 +2,7 @@
 import json
 import shutil
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.db import new_session
 from app.core.models import Compilation, TwitchChannel
@@ -159,3 +159,63 @@ def test_recover_after_restart(admin_client):
     cp.recover(db)
     assert comp.status == "failed"
     db.close()
+
+
+def test_weekly_schedule(admin_client, fake, monkeypatch):
+    from datetime import datetime
+
+    from app.core.models import CompilationSchedule
+    from app.pipeline import weekly
+    from app.worker.runner import run_schedules
+    from tests.conftest import user_id
+
+    monkeypatch.setenv("TZ", "Europe/Amsterdam")
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    # aanzetten zonder kanaal kan niet
+    r = c.post("/compilations/schedule", data={"enabled": "1"}, follow_redirects=True)
+    assert "minstens één kanaal" in r.text
+    r = c.post("/compilations/schedule", data={"enabled": "1", "channel_ids": [str(ch.id)], "weekday": "0", "hour": "9",
+                                               "count": "10", "ranking": "countdown", "intro": "1", "auto_render": "1"},
+               follow_redirects=True)
+    assert "Wekelijkse compilatie staat aan" in r.text and "maandag" in r.text
+    db = new_session()
+    s = db.scalar(select(CompilationSchedule))
+    assert s.enabled and s.channel_ids == [ch.id] and not s.outro
+    # direct na aanzetten niet meteen een gemist moment inhalen
+    assert not weekly.is_due(s)
+    # maandag 9:00 Amsterdam = 8:00 UTC (wintertijd)
+    s.last_run_at = datetime(2026, 11, 22, 12, 0)  # zondag
+    db.commit()
+    assert weekly.last_slot(s, datetime(2026, 11, 23, 8, 30)) == datetime(2026, 11, 23, 8, 0)
+    assert not weekly.is_due(s, datetime(2026, 11, 23, 7, 59))
+    assert weekly.is_due(s, datetime(2026, 11, 23, 8, 1))
+    assert weekly.run_due(db, datetime(2026, 11, 23, 8, 1)) == 1
+    assert weekly.run_due(db, datetime(2026, 11, 23, 8, 6)) == 0  # niet twee keer per week
+    comp = db.scalars(select(Compilation)).one()
+    assert comp.auto and comp.status == "queued" and comp.intro and not comp.outro
+    assert len(comp.items) == 2 and comp.items[-1].views == 12000
+    assert "Concept gemaakt met 2 clips" in s.last_result
+    db.close()
+    page = c.get("/compilations").text
+    assert "automatisch" in page and "Volgende: maandag" in page
+    # 'Nu een concept maken' werkt ook als de planning uit staat
+    r = c.post("/compilations/schedule", data={"channel_ids": [str(ch.id)], "run_now": "1"})
+    assert r.status_code == 303 and r.headers["location"].startswith("/compilations/")
+    assert run_schedules() == 0  # uit: niets
+    db = new_session()
+    assert db.scalar(select(func.count()).select_from(Compilation)) == 2
+    db.close()
+
+
+def test_twitch_preview_buttons(admin_client, fake):
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    page = c.get(f"/twitch?channel={ch.id}").text
+    assert 'data-twitch-clip="SlugEen-abc"' in page
+    r = c.post("/compilations", data={"channel_ids": [str(ch.id)], "count": "5"})
+    page = c.get(r.headers["location"]).text
+    assert 'data-twitch-clip="SlugTwee-def"' in page
+    assert "frame-src https://clips.twitch.tv" in c.get("/").headers["content-security-policy"]

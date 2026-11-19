@@ -14,6 +14,7 @@
 {% endif %}
 
 <div class="comp-layout">
+  <div>
   <section class="card">
     <h2>Nieuwe compilatie</h2>
     {% if channels %}
@@ -45,12 +46,56 @@
     {% endif %}
   </section>
 
+    <section class="card" id="weekly">
+      <h2>Wekelijks automatisch</h2>
+      <p class="hint" style="margin-top:0">Elke week op een vast moment een concept met de best bekeken clips van de afgelopen week. Het wordt meteen gerenderd als je dat aanzet, maar <strong>nooit vanzelf geüpload</strong>: je kijkt het eerst na.</p>
+      {% if channels %}
+      <form method="post" action="/compilations/schedule">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="row" style="font-weight:600;margin-bottom:.7rem"><input type="checkbox" name="enabled" value="1" {% if sched.enabled %}checked{% endif %}> Aan</label>
+        <div class="field"><label>Kanalen</label>
+          <div class="comp-channels">
+            {% for c in channels %}
+            <label class="comp-chan"><input type="checkbox" name="channel_ids" value="{{ c.id }}" {% if c.id in sched.channel_ids %}checked{% endif %}>
+              {% if c.profile_image_url %}<img src="{{ c.profile_image_url }}" alt="" loading="lazy">{% else %}<span class="channel-ph"></span>{% endif %}
+              <span>{{ c.display_name }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="form-2">
+          <div class="field"><label for="w-day">Dag</label>
+            <select id="w-day" name="weekday">{% for d in weekdays %}<option value="{{ loop.index0 }}" {% if loop.index0 == sched.weekday %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="w-hour">Tijd</label>
+            <select id="w-hour" name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if h == sched.hour %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></div>
+          <div class="field"><label for="w-count">Aantal clips</label>
+            <select id="w-count" name="count">{% for n in counts %}<option value="{{ n }}" {% if n == sched.count %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="w-rank">Volgorde</label>
+            <select id="w-rank" name="ranking">{% for k, v in rankings.items() %}<option value="{{ k }}" {% if k == sched.ranking %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="w-checks">
+          <label class="row" style="font-weight:500"><input type="checkbox" name="intro" value="1" {% if sched.intro %}checked{% endif %}> Introscherm</label>
+          <label class="row" style="font-weight:500"><input type="checkbox" name="outro" value="1" {% if sched.outro %}checked{% endif %}> Eindscherm</label>
+          <label class="row" style="font-weight:500"><input type="checkbox" name="auto_render" value="1" {% if sched.auto_render %}checked{% endif %}> Meteen renderen</label>
+        </div>
+        {% if next_run %}<p class="hint">Volgende: {{ weekdays[next_run.weekday()] }} {{ next_run.strftime('%d-%m') }} om {{ next_run.strftime('%H:%M') }}.</p>{% endif %}
+        {% if sched.last_result %}<p class="hint">Laatste keer{% if sched.last_run_at %} ({{ sched.last_run_at|dt }}){% endif %}: {{ sched.last_result }}{% if sched.last_compilation_id %} <a href="/compilations/{{ sched.last_compilation_id }}">Bekijken</a>{% endif %}</p>{% endif %}
+        <div class="comp-save">
+          <button class="btn btn-primary" type="submit">Opslaan</button>
+          <button class="btn" type="submit" name="run_now" value="1" {% if not has_key %}disabled{% endif %}>Nu een concept maken</button>
+        </div>
+      </form>
+      {% else %}
+      <p class="muted">Voeg eerst een kanaal toe op de <a href="/twitch">Twitch-pagina</a>.</p>
+      {% endif %}
+    </section>
+  </div>
+
   <section>
     {% for c in comps %}
     <a class="card comp-row" href="/compilations/{{ c.id }}">
       <span class="comp-thumb">{% if c.thumb_path %}<img src="/compilations/{{ c.id }}/thumb" alt="" loading="lazy">{% endif %}</span>
       <span class="comp-main">
-        <strong>{{ c.title }}</strong>
+        <strong>{{ c.title }}</strong>{% if c.auto %} <span class="badge">automatisch</span>{% endif %}
         <span class="muted">{{ c.included|length }} clips{% if c.duration %} · {{ (c.duration // 60)|int }}:{{ '%02d'|format((c.duration % 60)|int) }}{% endif %} · {{ c.created_at|dt }}</span>
       </span>
       <span>

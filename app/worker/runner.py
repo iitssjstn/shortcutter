@@ -17,6 +17,7 @@ log = logging.getLogger("shortcutter.worker")
 POLL_SECONDS = 2.0
 CLEANUP_EVERY = 3600.0
 STATS_EVERY = 6 * 3600.0
+SCHEDULE_EVERY = 300.0  # wekelijkse compilaties: elke 5 minuten kijken of er een aan de beurt is
 
 
 def sync_all_stats() -> None:
@@ -87,12 +88,23 @@ def run_compilation_once(upload: bool = False) -> bool:
         db.close()
 
 
+def run_schedules() -> int:
+    from app.pipeline import weekly
+
+    db = new_session()
+    try:
+        return weekly.run_due(db)
+    finally:
+        db.close()
+
+
 class Worker:
     def __init__(self) -> None:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_cleanup = 0.0
         self._last_stats = time.monotonic() - STATS_EVERY + 600  # eerste keer ±10 min na de start
+        self._last_schedule = 0.0
 
     def start(self) -> None:
         db = new_session()
@@ -139,6 +151,9 @@ class Worker:
                 if time.monotonic() - self._last_stats > STATS_EVERY:
                     self._last_stats = time.monotonic()
                     sync_all_stats()
+                if time.monotonic() - self._last_schedule > SCHEDULE_EVERY:
+                    self._last_schedule = time.monotonic()
+                    run_schedules()
                 if run_job_once(exclude=UPLOAD_KINDS) or run_compilation_once():
                     continue
             except Exception:
