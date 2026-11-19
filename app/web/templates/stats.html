@@ -41,11 +41,31 @@
   </section>
 </div>
 
+<section class="card" id="lessen">
+  <div class="tw-head">
+    <h2 style="margin:0">Wat de AI heeft geleerd</h2>
+    <div class="ins-actions">
+      <form method="post" action="/stats/sync"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit">↻ Views nu ophalen</button></form>
+      <form method="post" action="/stats/insights"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit" {% if insights.points < insights.min_points %}disabled{% endif %}>Opnieuw analyseren</button></form>
+    </div>
+  </div>
+  <p class="hint" style="margin:.4rem 0 .8rem">Views van clips op YouTube worden elke 6 uur automatisch opgehaald{% if insights.synced_at %} (laatst: {{ insights.synced_at|dt }}){% endif %}.
+    De AI krijgt deze lessen en je best en slechtst presterende clips mee bij het kiezen van fragmenten en het schrijven van titels. Dat is een richtlijn, geen garantie.</p>
+  {% if insights.points < insights.min_points %}
+  <div class="flash flash-warn" style="margin:0">Nog te weinig data: {{ insights.points }} van de {{ insights.min_points }} geposte clips met views. Post meer clips en vul (of laat ophalen) de views in.</div>
+  {% elif insights.lessons %}
+  <ol class="ins-list">{% for l in insights.lessons %}<li>{{ l }}</li>{% endfor %}</ol>
+  <p class="muted" style="font-size:.8rem;margin:0">Gebaseerd op {{ insights.based_on }} clips · {{ insights.generated_at }} UTC</p>
+  {% else %}
+  <p class="muted" style="margin:0">Er is genoeg data. Klik op "Opnieuw analyseren" om de eerste lessen te laten trekken.</p>
+  {% endif %}
+</section>
+
 <section class="card">
   <h2>Geposte clips</h2>
   {% if posted %}
   <div class="table-wrap"><table>
-    <thead><tr><th>Clip</th><th>Platform</th><th class="num">Score</th><th class="num">Schatting (laag–hoog)</th><th class="num">Echt</th><th class="num">Echt / geschat</th><th></th></tr></thead>
+    <thead><tr><th>Clip</th><th>Platform</th><th class="num">Score</th><th class="num">Schatting (laag–hoog)</th><th class="num">Echt</th><th class="num">Likes</th><th class="num">Echt / geschat</th><th></th></tr></thead>
     <tbody>
     {% for c in posted %}
       <tr>
@@ -54,6 +74,7 @@
         <td class="num">{{ c.viral_score }}</td>
         <td class="num">{{ fmt_views(c.est_low_at_post) }}–{{ fmt_views(c.est_high_at_post) }}</td>
         <td class="num">{{ fmt_views(c.actual_views) if c.actual_views is not none else '–' }}</td>
+        <td class="num">{{ c.likes if c.likes is not none else '–' }}</td>
         <td class="num">{% if c.actual_views is not none and c.est_mid_at_post %}{{ '%.2f'|format(c.actual_views / c.est_mid_at_post) }}×{% else %}–{% endif %}</td>
         <td class="num">
           <form method="post" action="/clips/{{ c.id }}/unpost" class="inline" data-confirm="'{{ c.title|truncate(40) }}' uit de statistieken verwijderen? De clip zelf blijft bestaan; een video op YouTube verwijder je in YouTube Studio.">

@@ -38,6 +38,29 @@ def _hook_type(c: Clip) -> str:
     return "geen vraag/claim"
 
 
+@router.post("/stats/sync")
+def stats_sync(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    from app.api.common import redirect
+    from app.estimation.insights import refresh_lessons, sync_user_stats
+
+    try:
+        n = sync_user_stats(db, user.id)
+    except Exception as exc:  # noqa: BLE001 - netwerk/koppeling
+        db.rollback()
+        return redirect("/stats", f"Views ophalen mislukt ({type(exc).__name__}). Is je YouTube-kanaal gekoppeld?", "error")
+    _, msg = refresh_lessons(db, user.id)
+    return redirect("/stats", f"Views van {n} clip(s) bijgewerkt. {msg}")
+
+
+@router.post("/stats/insights")
+def stats_insights(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    from app.api.common import redirect
+    from app.estimation.insights import refresh_lessons
+
+    ok, msg = refresh_lessons(db, user.id, force=True)
+    return redirect("/stats", msg, "ok" if ok else "error")
+
+
 @router.get("/stats")
 def stats_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     posted = list(
@@ -94,5 +117,21 @@ def stats_page(request: Request, user: User = Depends(require_user), db: Session
             "baseline": baseline,
             "min_median": MIN_POINTS_MEDIAN,
             "min_regression": MIN_POINTS_REGRESSION,
+            "insights": _insights_ctx(db, user.id),
         },
     )
+
+
+def _insights_ctx(db: Session, user_id: int) -> dict:
+    from app.estimation.insights import MIN_POINTS, performance_rows, stored
+
+    st = stored(db, user_id)
+    us = user_settings(db, user_id)
+    return {
+        "lessons": st.get("lessons") or [],
+        "based_on": st.get("n"),
+        "generated_at": (st.get("generated_at") or "").replace("T", " "),
+        "points": len(performance_rows(db, user_id)),
+        "min_points": MIN_POINTS,
+        "synced_at": us.stats_synced_at,
+    }

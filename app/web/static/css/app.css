@@ -147,6 +147,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tw-cat { display: grid; gap: .35rem; text-decoration: none; padding: .4rem; border-radius: 8px; border: 2px solid transparent; font-size: .85rem; font-weight: 600; text-align: center; }
 .tw-cat:hover, .tw-cat.on { border-color: var(--accent); background: var(--surface); }
 .tw-cat img, .tw-cat-ph { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 6px; background: var(--surface-2); display: block; }
+.ins-actions { display: grid; grid-auto-flow: column; gap: .4rem; }
+.ins-actions form { margin: 0; }
+.ins-list { margin: 0 0 .6rem; padding-left: 1.3rem; }
+.ins-list li { margin-bottom: .35rem; }
 .tw-toolbar { display: grid; grid-template-columns: auto minmax(0, 320px) auto; justify-content: end; gap: .6rem; align-items: center; margin-bottom: 1rem; }
 .tw-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .6rem; align-items: center; }
 .tw-periods { display: grid; grid-auto-flow: column; gap: .35rem; }

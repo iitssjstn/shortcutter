@@ -73,6 +73,7 @@ def generate_post_texts(
     sleep: Callable[[float], None] | None = None,
     language: str = "en",
     meta: dict | None = None,
+    insights: str = "",
 ) -> dict[int, dict]:
     """items: [{'id', 'text', 'title', optioneel 'before', 'context', 'frames', 'title_unreliable', 'duration'}].
 
@@ -90,6 +91,9 @@ def generate_post_texts(
              "Gebruik vooral de beelden en de gesproken tekst. Titels die als ONBETROUWBAAR gemarkeerd zijn, zijn door "
              "kijkers bedacht en vaak willekeurig: neem ze niet over. Noem de game alleen als die bekend is.\n"
              'Geef JSON: {"clips": [{"id": 1, "title": "...", "description": "...", "hashtags": ["#a", "#b"]}]}')
+    if insights:
+        intro = ("ERVARING VAN DIT KANAAL (echte resultaten; schrijf titels en beschrijvingen in de stijl van wat "
+                 "goed werkte en vermijd wat slecht werkte):\n" + insights + "\n\n" + intro)
 
     def block(it: dict) -> str:
         title_label = "werktitel (onbetrouwbaar)" if it.get("title_unreliable") else "werktitel"

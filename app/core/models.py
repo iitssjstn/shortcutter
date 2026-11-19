@@ -178,6 +178,8 @@ class UserSettings(Base):
     caption_style: Mapped[str] = mapped_column(String(32), default="geel")
     framing_default: Mapped[str] = mapped_column(String(16), default="auto")
     post_language: Mapped[str] = mapped_column(String(8), default="en")
+    insights_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # lessen uit eigen resultaten
+    stats_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Project(Base, JsonMixin):
@@ -283,6 +285,8 @@ class Clip(Base, JsonMixin):
     est_low_at_post: Mapped[float | None] = mapped_column(Float, nullable=True)
     est_high_at_post: Mapped[float | None] = mapped_column(Float, nullable=True)
     actual_views: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    likes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    comments: Mapped[int | None] = mapped_column(Integer, nullable=True)
     views_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

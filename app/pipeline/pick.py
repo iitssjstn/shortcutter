@@ -335,10 +335,15 @@ SYSTEM_PROMPT = (
 )
 
 
-def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: str = "en") -> str:
+def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: str = "en",
+                 insights: str = "") -> str:
     from app.pipeline.copywriting import copy_rules
 
-    return (
+    experience = (
+        "ERVARING VAN DIT KANAAL (echte resultaten van eerder geposte clips; gebruik dit als richtlijn bij "
+        f"het kiezen en scoren, maar blijf kritisch):\n{insights}\n\n" if insights else ""
+    )
+    return experience + (
         f"Kies maximaal {n} fragmenten van {min_dur:.0f} tot {max_dur:.0f} seconden uit dit "
         "transcript (tijden in seconden tussen haken). Geef JSON in de vorm:\n"
         '{"clips": [{"start": 12.3, "end": 45.6, "title": "posttitel", '
@@ -370,6 +375,7 @@ def llm_pick(
     sleep: Callable[[float], None] = _sleep,
     post_language: str = "en",
     meta: dict | None = None,
+    insights: str = "",
 ) -> list[dict]:
     from app.pipeline.copywriting import clean_description, clean_title, normalize_hashtags
 
@@ -386,7 +392,7 @@ def llm_pick(
             cfg,
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language)},
+                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language, insights)},
             ],
             client=client,
             sleep=sleep,

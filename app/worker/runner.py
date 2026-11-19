@@ -15,6 +15,28 @@ log = logging.getLogger("shortcutter.worker")
 
 POLL_SECONDS = 2.0
 CLEANUP_EVERY = 3600.0
+STATS_EVERY = 6 * 3600.0
+
+
+def sync_all_stats() -> None:
+    """Views van geposte YouTube-clips ophalen en de lessen van elk kanaal bijwerken."""
+    from sqlalchemy import select
+
+    from app.core.models import Clip
+    from app.estimation.insights import refresh_lessons, sync_user_stats
+
+    db = new_session()
+    try:
+        owners = set(db.scalars(select(Clip.owner_id).where(Clip.posted_at.is_not(None))).all())
+        for uid in owners:
+            try:
+                sync_user_stats(db, uid)
+                refresh_lessons(db, uid)
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                log.exception("Statistieken bijwerken voor gebruiker %s mislukt", uid)
+    finally:
+        db.close()
 
 
 def run_job_once() -> bool:
@@ -55,6 +77,7 @@ class Worker:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_cleanup = 0.0
+        self._last_stats = time.monotonic() - STATS_EVERY + 600  # eerste keer ±10 min na de start
 
     def start(self) -> None:
         db = new_session()
@@ -80,6 +103,9 @@ class Worker:
                         run_cleanup(db)
                     finally:
                         db.close()
+                if time.monotonic() - self._last_stats > STATS_EVERY:
+                    self._last_stats = time.monotonic()
+                    sync_all_stats()
                 if run_job_once():
                     continue
             except Exception:

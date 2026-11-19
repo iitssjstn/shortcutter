@@ -84,13 +84,16 @@ def generate_for_clips(db: Session, project: Project, clips: list[Clip]) -> tupl
         return 0, "Er zijn geen clips."
     with_frames = get_global(db, "llm_vision") != "0"
     lang = user_settings(db, project.owner_id).post_language or "en"
+    from app.pipeline.run import _insights
+
+    insights = _insights(db, project.owner_id)
     batch_size = 4 if with_frames else 10
     done = 0
     for i in range(0, len(clips), batch_size):
         batch = clips[i: i + batch_size]
         items = build_items(project, batch, with_frames)
         try:
-            result = generate_post_texts(cfg, items, language=lang)
+            result = generate_post_texts(cfg, items, language=lang, insights=insights)
         except LLMError as exc:
             db.commit()
             return done, f"Posttekst genereren mislukt: {exc}"

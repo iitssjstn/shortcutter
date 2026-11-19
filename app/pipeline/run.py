@@ -95,6 +95,16 @@ def write_clips_json(db: Session, project: Project) -> Path:
     return path
 
 
+def _insights(db: Session, owner_id: int) -> str:
+    try:
+        from app.estimation.insights import context_for_prompt
+
+        return context_for_prompt(db, owner_id)
+    except Exception:  # noqa: BLE001 - leren is een extraatje, nooit een reden om te falen
+        log.exception("Kanaalervaring ophalen mislukt")
+        return ""
+
+
 START_PAD = 0.2  # s eerder beginnen: de eerste klank niet afkappen
 END_PAD = 0.6  # s langer doorlopen: laatste woord en een korte reactie erna niet afkappen
 
@@ -285,7 +295,7 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
             lang = user_settings(db, project.owner_id).post_language or "en"
             picked, method, warning = pick_clips(
                 transcript, project.num_clips, project.min_dur, project.max_dur, cfg,
-                post_language=lang, meta=meta, **pick_kwargs,
+                post_language=lang, meta=meta, insights=_insights(db, project.owner_id), **pick_kwargs,
             )
             project.llm_model = meta.get("model") if method == "llm" else None
             project.picker_used = method
