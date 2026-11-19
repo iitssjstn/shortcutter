@@ -24,6 +24,7 @@ services:
       # Handmatig forceren kan met: CT2_FORCE_CPU_ISA: GENERIC  (geen AVX), WHISPER_VAD: "false"
       # WHISPER_THREADS: "2"      # minder CPU-threads (0 = automatisch)
       COOKIE_SECURE: "false"      # "true" zodra de app achter HTTPS (reverse proxy) draait
+      # UPLOAD_CONCURRENCY: "4"   # zoveel YouTube-uploads tegelijk (los van het verwerken van projecten)
       # PUBLIC_URL: "https://shorts.jouwdomein.nl"  # nodig voor de YouTube-koppeling (redirect-URL bij Google)
       # FORWARDED_ALLOW_IPS: "172.18.0.1"  # IP van je reverse proxy, voor het juiste client-IP
     healthcheck:

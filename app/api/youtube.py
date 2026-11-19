@@ -237,6 +237,16 @@ def run_upload(db: Session, clip_id: int) -> bool:
         return False
     clip.yt_status = "uploading"
     db.commit()
+    note = None
+    if opts.get("publish_at"):
+        try:
+            when = datetime.strptime(opts["publish_at"], "%Y-%m-%dT%H:%M:%SZ")
+            if when <= datetime.utcnow() + timedelta(minutes=2):
+                opts["publish_at"] = None
+                opts["privacy"] = "private"
+                note = "De geplande publicatietijd was al voorbij; de video is privé geüpload. Zet hem in YouTube Studio op openbaar."
+        except ValueError:
+            opts["publish_at"] = None
     tags = [t.lstrip("#") for t in (clip.hashtags or "").split() if t.strip("#")]
     try:
         res = yt.upload(
@@ -256,7 +266,7 @@ def run_upload(db: Session, clip_id: int) -> bool:
         return False
     clip.yt_status = "done"
     clip.yt_video_id = res["id"]
-    clip.yt_error = None
+    clip.yt_error = note
     if res.get("privacy") == "private" and opts.get("privacy") != "private" and not opts.get("publish_at"):
         clip.yt_error = ("YouTube heeft de video privé gezet. Dat gebeurt bij API-projecten die (nog) niet door Google "
                          "zijn geaudit; zet hem in YouTube Studio op openbaar.")

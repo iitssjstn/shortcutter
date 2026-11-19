@@ -1,6 +1,8 @@
 """Gedeelde wachtrij in de database. De worker verwerkt één job tegelijk."""
 from __future__ import annotations
 
+import threading
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -31,14 +33,24 @@ def enqueue(db: Session, project: Project, kind: str = "process", clip_id: int |
     return job
 
 
-def claim_next(db: Session) -> Job | None:
-    job = db.scalar(select(Job).where(Job.status == "queued").order_by(Job.created_at, Job.id).limit(1))
-    if job is None:
-        return None
-    job.status = "running"
-    job.started_at = utcnow()
-    db.commit()
-    return job
+_claim_lock = threading.Lock()
+
+
+def claim_next(db: Session, kinds: tuple[str, ...] | None = None, exclude: tuple[str, ...] | None = None) -> Job | None:
+    """Pak de oudste wachtende job (optioneel alleen bepaalde soorten). Veilig vanuit meerdere threads."""
+    with _claim_lock:
+        q = select(Job).where(Job.status == "queued")
+        if kinds:
+            q = q.where(Job.kind.in_(kinds))
+        if exclude:
+            q = q.where(Job.kind.not_in(exclude))
+        job = db.scalar(q.order_by(Job.created_at, Job.id).limit(1))
+        if job is None:
+            return None
+        job.status = "running"
+        job.started_at = utcnow()
+        db.commit()
+        return job
 
 
 def finish(db: Session, job: Job, error: str | None = None) -> None:

@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 
+from app.core.config import get_settings
 from app.core.db import new_session
 from app.core.models import Project
 from app.pipeline.run import process_project, rerender_clip
@@ -39,11 +40,14 @@ def sync_all_stats() -> None:
         db.close()
 
 
-def run_job_once() -> bool:
+UPLOAD_KINDS = ("upload",)
+
+
+def run_job_once(kinds: tuple[str, ...] | None = None, exclude: tuple[str, ...] | None = None) -> bool:
     """Verwerk de volgende job. Geeft False als de wachtrij leeg is."""
     db = new_session()
     try:
-        job = queue.claim_next(db)
+        job = queue.claim_next(db, kinds=kinds, exclude=exclude)
         if job is None:
             return False
         log.info("Job %s (%s) voor project %s gestart", job.id, job.kind, job.project_id)
@@ -89,6 +93,21 @@ class Worker:
             db.close()
         self._thread = threading.Thread(target=self._loop, name="shortcutter-worker", daemon=True)
         self._thread.start()
+        # uploads lopen los van het zware werk, en meerdere tegelijk (vooral netwerk, weinig CPU)
+        n_up = max(1, get_settings().upload_concurrency)
+        self._uploaders = [threading.Thread(target=self._upload_loop, name=f"shortcutter-upload-{i}", daemon=True)
+                           for i in range(n_up)]
+        for t in self._uploaders:
+            t.start()
+
+    def _upload_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                if run_job_once(kinds=UPLOAD_KINDS):
+                    continue
+            except Exception:
+                log.exception("Fout in de upload-lus")
+            self._stop.wait(POLL_SECONDS)
 
     def stop(self) -> None:
         self._stop.set()
@@ -106,7 +125,7 @@ class Worker:
                 if time.monotonic() - self._last_stats > STATS_EVERY:
                     self._last_stats = time.monotonic()
                     sync_all_stats()
-                if run_job_once():
+                if run_job_once(exclude=UPLOAD_KINDS):
                     continue
             except Exception:
                 log.exception("Fout in de worker-lus")

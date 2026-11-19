@@ -176,3 +176,82 @@ def test_schedule_and_token_refresh(admin_client, settings, google):
     db = new_session()
     assert db.get(Clip, cids[0]).yt_options_json == before
     db.close()
+
+
+def test_upload_not_blocked_by_project_queue(admin_client, settings, google):
+    """Uploads hebben een eigen rij: ze wachten niet op projecten die nog verwerkt moeten worden."""
+    from app.core.models import Job, Project
+    from app.worker import queue
+    from app.worker.runner import UPLOAD_KINDS
+
+    _setup_oauth(admin_client)
+    _connect(admin_client)
+    db = new_session()
+    big = Project(owner_id=1, source_type="upload", title="lange stream")
+    db.add(big)
+    db.commit()
+    queue.enqueue(db, big)  # staat eerder in de rij
+    db.close()
+    _, (cid,) = make_project_with_clip(settings, "admin")
+    admin_client.post(f"/clips/{cid}/youtube", data={"title": "t", "privacy": "private"})
+    assert run_job_once(kinds=UPLOAD_KINDS)
+    db = new_session()
+    assert db.get(Clip, cid).yt_status == "done"
+    assert db.scalar(select(Job).where(Job.kind == "process")).status == "queued"  # project nog onaangeroerd
+    db.close()
+
+
+def test_uploads_run_in_parallel_without_double_claims(admin_client, settings, google, monkeypatch):
+    import threading
+    import time as _t
+
+    from app.worker.runner import UPLOAD_KINDS
+
+    _setup_oauth(admin_client)
+    _connect(admin_client)
+    _, cids = make_project_with_clip(settings, "admin", n_clips=4)
+    for cid in cids:
+        admin_client.post(f"/clips/{cid}/youtube", data={"title": f"t{cid}", "privacy": "private"})
+    state = {"now": 0, "max": 0, "puts": 0}
+    lock = threading.Lock()
+    orig = google.handler
+
+    def slow(request):
+        if request.url.host == "upload.example":
+            with lock:
+                state["now"] += 1
+                state["puts"] += 1
+                state["max"] = max(state["max"], state["now"])
+            _t.sleep(0.3)
+            with lock:
+                state["now"] -= 1
+        return orig(request)
+
+    monkeypatch.setattr(yt, "_client_factory", lambda: httpx.Client(transport=httpx.MockTransport(slow)))
+    threads = [threading.Thread(target=lambda: run_job_once(kinds=UPLOAD_KINDS)) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state["puts"] == 4 and state["max"] >= 2
+    db = new_session()
+    assert all(db.get(Clip, c).yt_status == "done" for c in cids)
+    db.close()
+
+
+def test_expired_publish_time_uploads_private(admin_client, settings, google):
+    _setup_oauth(admin_client)
+    _connect(admin_client)
+    _, (cid,) = make_project_with_clip(settings, "admin")
+    db = new_session()
+    c = db.get(Clip, cid)
+    c.yt_options_json = json.dumps({"title": "t", "description": "", "privacy": "private",
+                                    "publish_at": "2020-01-01T10:00:00Z", "made_for_kids": False})
+    c.yt_status = "queued"
+    db.commit()
+    from app.api.youtube import run_upload
+    assert run_upload(db, cid)
+    c = db.get(Clip, cid)
+    assert c.yt_status == "done" and "al voorbij" in (c.yt_error or "")
+    db.close()
+    assert "publishAt" not in google.last_meta["status"]
