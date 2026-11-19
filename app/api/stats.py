@@ -39,26 +39,35 @@ def _hook_type(c: Clip) -> str:
 
 
 @router.post("/stats/sync")
-def stats_sync(user: User = Depends(require_user), db: Session = Depends(get_db)):
+def stats_sync(user: User = Depends(require_user)):
     from app.api.common import redirect
-    from app.estimation.insights import refresh_lessons, sync_user_stats
+    from app.estimation.insights import start_background
 
-    try:
-        n = sync_user_stats(db, user.id)
-    except Exception as exc:  # noqa: BLE001 - netwerk/koppeling
-        db.rollback()
-        return redirect("/stats", f"Views ophalen mislukt ({type(exc).__name__}). Is je YouTube-kanaal gekoppeld?", "error")
-    _, msg = refresh_lessons(db, user.id)
-    return redirect("/stats", f"Views van {n} clip(s) bijgewerkt. {msg}")
+    if not start_background(user.id, sync=True):
+        return redirect("/stats#lessen", "Er loopt al een update; even geduld.")
+    return redirect("/stats#lessen", "Views worden op de achtergrond opgehaald. De pagina ververst vanzelf.")
 
 
 @router.post("/stats/insights")
-def stats_insights(user: User = Depends(require_user), db: Session = Depends(get_db)):
+def stats_insights(user: User = Depends(require_user)):
     from app.api.common import redirect
-    from app.estimation.insights import refresh_lessons
+    from app.estimation.insights import start_background
 
-    ok, msg = refresh_lessons(db, user.id, force=True)
-    return redirect("/stats", msg, "ok" if ok else "error")
+    if not start_background(user.id, sync=False, force=True):
+        return redirect("/stats#lessen", "Er loopt al een update; even geduld.")
+    return redirect("/stats#lessen", "De AI analyseert je resultaten op de achtergrond. De pagina ververst vanzelf.")
+
+
+@router.get("/stats/insights-status")
+def stats_insights_status(user: User = Depends(require_user)):
+    """HTMX-poll: zolang er een run bezig is 204, daarna een volledige verversing."""
+    from fastapi.responses import Response
+
+    from app.estimation.insights import is_running
+
+    if is_running(user.id):
+        return Response(status_code=204)
+    return Response(status_code=200, headers={"HX-Refresh": "true"})
 
 
 @router.get("/stats")
@@ -123,7 +132,7 @@ def stats_page(request: Request, user: User = Depends(require_user), db: Session
 
 
 def _insights_ctx(db: Session, user_id: int) -> dict:
-    from app.estimation.insights import MIN_POINTS, performance_rows, stored
+    from app.estimation.insights import MIN_POINTS, is_running, last_result, performance_rows, stored
 
     st = stored(db, user_id)
     us = user_settings(db, user_id)
@@ -134,4 +143,6 @@ def _insights_ctx(db: Session, user_id: int) -> dict:
         "points": len(performance_rows(db, user_id)),
         "min_points": MIN_POINTS,
         "synced_at": us.stats_synced_at,
+        "running": is_running(user_id),
+        "result": last_result(user_id),
     }
