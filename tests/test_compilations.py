@@ -247,3 +247,74 @@ def test_custom_clip_count(admin_client, fake):
     db = new_session()
     assert db.scalar(select(CompilationSchedule)).count == cp.MAX_ITEMS
     db.close()
+
+
+def test_short_top_list(admin_client, fake, sample_video, monkeypatch):
+    from types import SimpleNamespace as N
+
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    fake.clips["123"].append({"id": "SlugDrie-ghi", "url": "https://clips.twitch.tv/SlugDrie-ghi", "title": "Clutch #3",
+                              "view_count": 800, "duration": 12.0, "broadcaster_id": "123", "broadcaster_name": "Streamer"})
+    r = c.post("/compilations", data={"channel_ids": [str(ch.id)], "count": "50", "format": "short"})
+    cid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = new_session()
+    comp = db.get(Compilation, cid)
+    assert comp.format == "short" and not comp.intro and not comp.outro  # short begint meteen
+    assert comp.title == "Ranking Top 3 *Streamer* Moments"
+    db.close()
+    page = c.get(f"/compilations/{cid}").text
+    assert "staand 1080×1920" in page and "Titel bovenaan in beeld" in page
+
+    # lijstje: plaats 1 bovenaan, nog niet getoonde clips als ???
+    items = [N(title="a"), N(title="b"), N(title="c")]
+    assert cp.short_list("countdown", items, 0) == [(1, "c", "nog"), (2, "b", "nog"), (3, "a", "nu")]
+    assert cp.short_list("countdown", items, 2) == [(1, "c", "nu"), (2, "b", "gezien"), (3, "a", "gezien")]
+    assert cp.short_list("none", items, 0) == []
+    assert cp._title_words("Ranking Top 5 *Bruh* Moments") == [
+        ("Ranking", (255, 255, 255)), ("Top", cp.TITLE_ACCENT), ("5", cp.TITLE_ACCENT),
+        ("Bruh", cp.TITLE_MARK), ("Moments", (255, 255, 255))]
+
+    assert c.post(f"/compilations/{cid}/render").status_code == 303
+    monkeypatch.setattr(cp, "download", _fake_download(sample_video))
+    assert run_compilation_once() is True
+    db = new_session()
+    comp = db.get(Compilation, cid)
+    assert comp.status == "done", comp.error
+    info = media.probe(cp.comp_dir(cid) / comp.file_path)
+    assert (info["width"], info["height"]) == (1080, 1920) and info["has_audio"]
+    assert abs(info["duration"] - 24.0) < 1.0  # 3 x 8 s, zonder intro/outro
+    assert comp.chapters == [] and "#shorts" in comp.hashtags
+    assert "*" not in comp.yt_title
+    db.close()
+
+
+def test_short_limits(admin_client, fake):
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    for i in range(14):
+        fake.clips["123"].append({"id": f"L{i}", "url": f"https://clips.twitch.tv/L{i}", "title": f"Lang {i}",
+                                  "view_count": 50 + i, "duration": 40.0, "broadcaster_id": "123",
+                                  "broadcaster_name": "Streamer"})
+    r = c.post("/compilations", data={"channel_ids": [str(ch.id)], "count": "30", "format": "short"})
+    cid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = new_session()
+    comp = db.get(Compilation, cid)
+    assert len(comp.items) == cp.MAX_SHORT_ITEMS  # maximaal 10 in een short
+    ids = [i.id for i in comp.items]
+    db.close()
+    r = c.post(f"/compilations/{cid}/render", follow_redirects=True)
+    assert "maximaal 3 minuten" in r.text  # 10 clips: ruim 3 min
+    # inkorten tot 6 clips van 25 s: past
+    form = {"title": "Top", "ranking": "countdown"}
+    for i in ids[:6]:
+        form.update({f"inc_{i}": "1", f"start_{i}": "0", f"end_{i}": "25"})
+    r = c.post(f"/compilations/{cid}", data=dict(form, render="1"), follow_redirects=True)
+    assert "in de wachtrij" in r.text
+    c.post("/compilations/schedule", data={"channel_ids": [str(ch.id)], "format": "short"})
+    from app.core.models import CompilationSchedule
+    db = new_session()
+    assert db.scalar(select(CompilationSchedule)).format == "short"
+    db.close()

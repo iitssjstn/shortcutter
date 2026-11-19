@@ -209,6 +209,12 @@ Onder **Compilaties** maak je van de best bekeken Twitch-clips één liggende vi
    minstens 10 seconden.
 5. Download de mp4 of upload hem via je gekoppelde YouTube-kanaal (direct of ingepland).
 
+**Short top-lijst (9:16)**: kies bij Formaat "Short top-lijst". De clips vullen het staande
+beeld (smalle vervaagde rand), bovenaan staat een grote titel en links een genummerd lijstje
+(1 goud, 2 zilver, 3 brons) dat zich vult terwijl de clips voorbijkomen. "Top 5" in de titel
+wordt groen; zet een woord tussen sterretjes voor rood (`Ranking Top 5 *Speed* Moments`).
+Maximaal 10 clips en 3 minuten; zonder intro en eindscherm, #shorts gaat automatisch mee.
+
 Klik op een miniatuur (in de compilatie of op de Twitch-pagina) om de clip af te spelen
 zonder de pagina te verlaten.
 

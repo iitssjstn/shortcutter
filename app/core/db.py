@@ -48,6 +48,8 @@ def init_db(db_path: str) -> Engine:
 # Kolommen die later zijn toegevoegd: (tabel, kolom, SQL-type met default)
 _ADDED_COLUMNS = [
     ("compilations", "auto", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("compilations", "format", "VARCHAR(10) NOT NULL DEFAULT 'landscape'"),
+    ("compilation_schedules", "format", "VARCHAR(10) NOT NULL DEFAULT 'landscape'"),
     ("jobs", "attempts", "INTEGER NOT NULL DEFAULT 0"),
     ("user_settings", "framing_default", "VARCHAR(16) NOT NULL DEFAULT 'auto'"),
     ("projects", "framing", "VARCHAR(16) NOT NULL DEFAULT 'auto'"),

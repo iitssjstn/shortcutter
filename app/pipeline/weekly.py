@@ -36,8 +36,11 @@ def item_from_clip(clip: dict, ch: TwitchChannel, game: str | None, pos: int) ->
 
 
 def build_draft(db: Session, owner_id: int, channels: list[TwitchChannel], period: str, count: int,
-                ranking: str) -> Compilation:
+                ranking: str, fmt: str = "landscape") -> Compilation:
     """Zoek de best bekeken clips van deze (toegestane) kanalen en maak er een concept van."""
+    fmt = fmt if fmt in cp.FORMATS else "landscape"
+    if fmt == "short":
+        count = min(count, cp.MAX_SHORT_ITEMS)
     if not channels:
         raise DraftError("Kies minstens één kanaal uit je lijst.")
     if any(ch.owner_id != owner_id for ch in channels):
@@ -63,8 +66,9 @@ def build_draft(db: Session, owner_id: int, channels: list[TwitchChannel], perio
     if ranking == "countdown":
         top.reverse()  # minst bekeken eerst, #1 als laatste
     lang = cp._lang(db, owner_id)
-    comp = Compilation(owner_id=owner_id, period=period, ranking=ranking,
-                       title=cp.default_title(period, [c.get("broadcaster_name", "") for c, _ in top], lang))
+    comp = Compilation(owner_id=owner_id, period=period, ranking=ranking, format=fmt,
+                       intro=fmt != "short", outro=fmt != "short",  # een short begint meteen met de eerste clip
+                       title=cp.default_title(period, [c.get("broadcaster_name", "") for c, _ in top], lang, fmt))
     games: dict[str, str] = {}
     for k, (clip, ch) in enumerate(top):
         gid = clip.get("game_id") or ""
@@ -123,13 +127,14 @@ def run_schedule(db: Session, s: CompilationSchedule, now_utc: datetime | None =
     chans = list(db.scalars(select(TwitchChannel).where(TwitchChannel.owner_id == s.owner_id,
                                                         TwitchChannel.id.in_(s.channel_ids or [0]))).all())
     try:
-        comp = build_draft(db, s.owner_id, chans, "week", s.count, s.ranking)
+        comp = build_draft(db, s.owner_id, chans, "week", s.count, s.ranking, s.format or "landscape")
     except DraftError as exc:
         s.last_result = f"Geen compilatie gemaakt: {exc}"
         db.commit()
         return None
     comp.auto = True
-    comp.intro, comp.outro = s.intro, s.outro
+    if comp.format != "short":
+        comp.intro, comp.outro = s.intro, s.outro
     if s.auto_render:
         comp.status = "queued"
         comp.stage_message = "In wachtrij"
