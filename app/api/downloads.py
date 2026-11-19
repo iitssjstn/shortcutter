@@ -81,10 +81,10 @@ def download_subtitles(cid: int, fmt: str, user: User = Depends(require_user), d
         raise HTTPException(404, "Er is geen transcript voor deze clip.")
     words = all_words(transcript)
     if fmt == "srt":
-        body = captions.build_srt(words, clip.start, clip.end, clip.custom_captions)
+        body = captions.build_srt(words, clip.start, clip.end, clip.custom_captions, offset=clip.teaser_len or 0.0)
     else:
         body = captions.build_ass(words, clip.start, clip.end, clip.project.caption_style,
-                                  clip.caption_opts or None, clip.custom_captions)
+                                  clip.caption_opts or None, clip.custom_captions, offset=clip.teaser_len or 0.0)
     return Response(body, media_type="text/plain; charset=utf-8", headers=attachment(clip_filename(clip, ext=fmt)))
 
 

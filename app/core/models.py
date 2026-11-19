@@ -180,6 +180,7 @@ class UserSettings(Base):
     post_language: Mapped[str] = mapped_column(String(8), default="en")
     insights_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # lessen uit eigen resultaten
     stats_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    hook_teaser: Mapped[bool] = mapped_column(Boolean, default=True)  # nieuwe clips: sterkste moment vooraan
 
 
 class Project(Base, JsonMixin):
@@ -272,6 +273,10 @@ class Clip(Base, JsonMixin):
     yt_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     yt_video_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     yt_options_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # titel, beschrijving, privacy, publishAt
+    yt_tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # verborgen YouTube-tags, komma-gescheiden
+    hook_at: Mapped[float | None] = mapped_column(Float, nullable=True)  # sterkste moment (brontijd, s)
+    teaser: Mapped[bool] = mapped_column(Boolean, default=False)  # sterkste moment kort vooraan tonen
+    teaser_len: Mapped[float] = mapped_column(Float, default=0.0)  # lengte van de teaser in de render (s)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -374,6 +379,7 @@ class Compilation(Base, JsonMixin):
     yt_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     yt_video_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     yt_options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    yt_tags: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

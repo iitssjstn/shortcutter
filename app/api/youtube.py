@@ -247,7 +247,9 @@ def run_upload(db: Session, clip_id: int) -> bool:
                 note = "De geplande publicatietijd was al voorbij; de video is privé geüpload. Zet hem in YouTube Studio op openbaar."
         except ValueError:
             opts["publish_at"] = None
-    tags = [t.lstrip("#") for t in (clip.hashtags or "").split() if t.strip("#")]
+    from app.estimation.trends import upload_tags
+
+    tags = upload_tags(clip.yt_tags, clip.hashtags)
     try:
         res = yt.upload(
             db, acc, path,

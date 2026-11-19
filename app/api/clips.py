@@ -276,6 +276,15 @@ def toggle_captions(cid: int, enabled: str = Form("0"), user: User = Depends(req
     return redirect(_back(clip), _queue_render(db, clip))
 
 
+@router.post("/clips/{cid}/teaser")
+def toggle_teaser(cid: int, enabled: str = Form("0"), user: User = Depends(require_user), db: Session = Depends(get_db)):
+    clip = get_clip_for(db, user, cid)
+    clip.teaser = enabled in ("1", "true", "on")
+    db.commit()
+    msg = _queue_render(db, clip)
+    return redirect(_back(clip), ("Teaser aangezet. " if clip.teaser else "Teaser uitgezet. ") + msg)
+
+
 @router.post("/clips/{cid}/retitle")
 def retitle(
     cid: int,
@@ -283,9 +292,12 @@ def retitle(
     hook: str = Form(None),
     description: str = Form(None),
     hashtags: str = Form(None),
+    yt_tags: str = Form(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    from app.estimation.trends import normalize_tags
+
     clip = get_clip_for(db, user, cid)
     title = title.strip()
     if not title:
@@ -297,6 +309,8 @@ def retitle(
         clip.description = description.strip()[:1000]
     if hashtags is not None:
         clip.hashtags = normalize_hashtags(hashtags)
+    if yt_tags is not None:
+        clip.yt_tags = normalize_tags(yt_tags) or None
     db.commit()
     write_clips_json(db, clip.project)
     return redirect(_back(clip), "Titel bijgewerkt.")

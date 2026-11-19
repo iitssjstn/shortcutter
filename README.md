@@ -227,6 +227,18 @@ Let op: compilaties van andermans clips ziet YouTube snel als "hergebruikte cont
 wat het te gelde maken van je kanaal kan bemoeilijken. Eigen commentaar of eigen
 inbreng helpt.
 
+## Tags en het sterkste moment
+
+- **Tags van wat nu werkt**: bij het schrijven van titels en hashtags zoekt Shortcutter de best
+  bekeken video's van de afgelopen 30 dagen over dezelfde game/streamer (YouTube Data API) en geeft
+  hun tags, hashtags en titels mee aan de AI. Die kiest daaruit wat echt bij de clip past en vult de
+  verborgen tags in; die gaan mee bij het uploaden. Kost 100 quota-eenheden per onderwerp per dag
+  (24 uur bewaard). Uit te zetten bij Instellingen (beheer). Tags hebben volgens YouTube een kleine
+  invloed; titel, thumbnail en kijkgedrag tellen veel zwaarder.
+- **Teaser vooraan**: nieuwe clips beginnen met ±2 seconden van het sterkste moment (de piek die de
+  AI aanwijst, anders het luidste moment in het geluid), daarna de clip vanaf het begin. Ondertitels
+  schuiven mee. Aan/uit als standaard bij Instellingen en per clip.
+
 ## Uploaden naar YouTube
 
 Gebruikers kunnen hun eigen YouTube-kanaal koppelen (**Mijn account**) en clips direct uploaden of een selectie

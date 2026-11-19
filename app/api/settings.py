@@ -78,6 +78,7 @@ def save_user_settings(
     caption_style: str = Form("geel"),
     framing_default: str = Form("auto"),
     post_language: str = Form("en"),
+    hook_teaser: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -89,6 +90,7 @@ def save_user_settings(
     us.caption_style = caption_style if caption_style in CAPTION_STYLES else "geel"
     us.framing_default = framing_default if framing_default in FRAMING_MODES else "auto"
     us.post_language = post_language if post_language in POST_LANGUAGES else "en"
+    us.hook_teaser = hook_teaser in ("1", "on", "true")
     db.commit()
     return redirect("/settings", "Instellingen opgeslagen.")
 
@@ -118,6 +120,7 @@ def save_global(
     llm_model_copy: str = Form(""),
     llm_vision: str = Form(""),
     llm_vision_present: str = Form(""),
+    trend_tags: str = Form(""),
     max_active_per_user: int = Form(0),
     source_retention_days: int = Form(7),
     project_retention_days: int = Form(0),
@@ -132,6 +135,7 @@ def save_global(
     set_global(db, "llm_model_override", "")
     if llm_vision_present:
         set_global(db, "llm_vision", "1" if llm_vision in ("1", "on", "true") else "0")
+        set_global(db, "trend_tags", "1" if trend_tags in ("1", "on", "true") else "0")
     set_global(db, "max_active_per_user", str(_clamp(max_active_per_user, 0, 1000)))
     set_global(db, "source_retention_days", str(_clamp(source_retention_days, 0, 3650)))
     set_global(db, "project_retention_days", str(_clamp(project_retention_days, 0, 3650)))

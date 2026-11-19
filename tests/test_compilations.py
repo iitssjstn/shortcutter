@@ -113,7 +113,8 @@ def test_compilation_end_to_end(admin_client, fake, google, sample_video, monkey
     db.close()
     meta = google.last_meta
     assert meta["snippet"]["title"] == "Best Streamer Clips #47" and meta["snippet"]["categoryId"] == "20"
-    assert meta["snippet"]["tags"] == ["twitch", "gaming"]
+    tags = meta["snippet"]["tags"]
+    assert tags[0] == "twitch clips" and "Streamer" in tags and tags[-2:] == ["twitch", "gaming"]  # verborgen tags + hashtags
 
 
 def test_compilation_permissions(two_users, fake, sample_video, monkeypatch):

@@ -122,8 +122,11 @@ def build_ass(
     style: str = "geel",
     opts: dict | None = None,
     groups: list[dict] | None = None,
+    offset: float = 0.0,
 ) -> str:
-    """Karaoke-ondertitels. `groups` (eigen tekst) en `opts` (positie, grootte, kleur, hoofdletters) zijn optioneel."""
+    """Karaoke-ondertitels. `groups` (eigen tekst) en `opts` (positie, grootte, kleur, hoofdletters) zijn optioneel.
+
+    `offset` schuift alles op (bijv. als er een teaser vóór de clip staat)."""
     o = merge_opts(opts, style)
     primary, secondary = STYLE_COLORS.get(o["color"], STYLE_COLORS["geel"])
     header = HEADER.format(primary=primary, secondary=secondary).replace(
@@ -151,15 +154,16 @@ def build_ass(
             parts.append(f"{{\\k{dur_cs}}}{escape_ass(word)}")
             cursor = w["end"]
         text = " ".join(parts)
-        lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Karaoke,,0,0,0,,{pos_tag}{text}")
+        lines.append(f"Dialogue: 0,{ass_time(start + offset)},{ass_time(end + offset)},Karaoke,,0,0,0,,{pos_tag}{text}")
     return "\n".join(lines) + "\n"
 
 
-def build_srt(words: list[dict], clip_start: float, clip_end: float, groups: list[dict] | None = None) -> str:
+def build_srt(words: list[dict], clip_start: float, clip_end: float, groups: list[dict] | None = None,
+              offset: float = 0.0) -> str:
     out = []
     if groups is not None:
         for i, g in enumerate([g for g in groups if g.get("text", "").strip()], 1):
-            out.append(f"{i}\n{srt_time(g['start'])} --> {srt_time(g['end'])}\n{g['text'].strip()}\n")
+            out.append(f"{i}\n{srt_time(g['start'] + offset)} --> {srt_time(g['end'] + offset)}\n{g['text'].strip()}\n")
         return "\n".join(out)
     # voor .srt: iets langere regels (max 7 woorden) voor leesbaarheid
     rel = [g for g in group_words(words, clip_start, clip_end)]
@@ -172,11 +176,11 @@ def build_srt(words: list[dict], clip_start: float, clip_end: float, groups: lis
             merged.append(list(g))
     for i, g in enumerate(merged, 1):
         text = " ".join(w["word"] for w in g)
-        out.append(f"{i}\n{srt_time(g[0]['start'])} --> {srt_time(g[-1]['end'])}\n{text}\n")
+        out.append(f"{i}\n{srt_time(g[0]['start'] + offset)} --> {srt_time(g[-1]['end'] + offset)}\n{text}\n")
     return "\n".join(out)
 
 
 def write_ass(path: Path, words: list[dict], clip_start: float, clip_end: float, style: str = "geel",
-              opts: dict | None = None, groups: list[dict] | None = None) -> Path:
-    path.write_text(build_ass(words, clip_start, clip_end, style, opts, groups), encoding="utf-8")
+              opts: dict | None = None, groups: list[dict] | None = None, offset: float = 0.0) -> Path:
+    path.write_text(build_ass(words, clip_start, clip_end, style, opts, groups, offset), encoding="utf-8")
     return path

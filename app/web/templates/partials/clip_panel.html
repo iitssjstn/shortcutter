@@ -71,6 +71,8 @@
                   <div class="field"><label for="tags-{{ c.id }}">Hashtags</label><input id="tags-{{ c.id }}" name="hashtags" type="text" value="{{ c.hashtags }}" placeholder="#shorts"></div>
                   <div class="field"><label for="hook-{{ c.id }}">Hook (openingszin)</label><input id="hook-{{ c.id }}" name="hook" type="text" value="{{ c.hook }}"></div>
                 </div>
+                <div class="field"><label for="yttags-{{ c.id }}">Tags (verborgen, voor YouTube)</label><input id="yttags-{{ c.id }}" name="yt_tags" type="text" value="{{ c.yt_tags or '' }}" placeholder="bijv. gta 6, speed, ishowspeed">
+                  <div class="hint">Komma-gescheiden. Gaan mee bij uploaden, samen met de hashtags.</div></div>
                 <button class="btn btn-sm" type="submit">Tekst opslaan</button>
               </form>
               <form method="post" action="/clips/{{ c.id }}/trim">
@@ -99,6 +101,11 @@
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <input type="hidden" name="enabled" value="{{ '0' if c.captions_enabled else '1' }}">
                   <button class="btn btn-sm" type="submit">Ondertitels {{ 'uit' if c.captions_enabled else 'aan' }}zetten</button>
+                </form>
+                <form method="post" action="/clips/{{ c.id }}/teaser" title="Sterkste moment kort vooraan{% if c.hook_at is not none %} (op {{ (c.hook_at - c.start)|round(1) }} s){% endif %}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="enabled" value="{{ '0' if c.teaser else '1' }}">
+                  <button class="btn btn-sm" type="submit">Teaser vooraan {{ 'uit' if c.teaser else 'aan' }}zetten</button>
                 </form>
                 <form method="post" action="/clips/{{ c.id }}/rerender">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

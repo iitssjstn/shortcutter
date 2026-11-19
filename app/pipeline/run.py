@@ -126,6 +126,16 @@ SPLIT_NOTES = {
 }
 
 
+def _trend_kw(db: Session, project: Project) -> dict:
+    """{'trends': ...} voor de fragmentkeuze, alleen als er iets is (zodat de heuristiek het niet krijgt)."""
+    if load_llm_config(db, "pick") is None:
+        return {}
+    from app.pipeline.posttext import project_trends
+
+    text = project_trends(db, project)
+    return {"trends": text} if text else {}
+
+
 def _auto_post_text(db: Session, project: Project) -> None:
     """Probeer meteen posttekst te laten schrijven voor clips zonder beschrijving. Faalt stil (met waarschuwing)."""
     from app.pipeline.posttext import generate_for_clips
@@ -137,6 +147,31 @@ def _auto_post_text(db: Session, project: Project) -> None:
     if err:
         project.add_warning(f"{err} Gebruik 'Posttekst voor alle clips' om het opnieuw te proberen.")
         db.commit()
+
+
+TEASER_MIN_CLIP = 8.0  # kortere clips krijgen geen teaser
+TEASER_BEFORE, TEASER_LEN = 1.0, 1.8  # vanaf 1 s vóór de piek, 1,8 s lang
+
+
+def teaser_window(clip: Clip, source: Path, info: dict) -> tuple[float, float] | None:
+    """(a, b) in clip-tijd voor de teaser, of None. Piek van de AI, anders het luidste moment."""
+    if not clip.teaser or clip.duration < TEASER_MIN_CLIP or not info.get("has_audio", True) and clip.hook_at is None:
+        return None
+    peak = clip.hook_at if clip.hook_at is not None and clip.start + 1.0 <= clip.hook_at <= clip.end - 0.5 else None
+    if peak is None:
+        try:
+            peak = media.loudest_moment(source, clip.start, clip.end)
+        except Exception:  # noqa: BLE001 - zonder piek geen teaser
+            peak = None
+        clip.hook_at = peak
+    if peak is None:
+        return None
+    rel = peak - clip.start
+    a = max(0.0, rel - TEASER_BEFORE)
+    b = min(clip.duration, a + TEASER_LEN)
+    if a < 2.0 or b - a < 1.0:  # piek zit al vooraan: een teaser voegt niets toe
+        return None
+    return round(a, 3), round(b, 3)
 
 
 def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: dict) -> None:
@@ -177,14 +212,20 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
         else:
             cmd_path.unlink(missing_ok=True)
         clip.framing_mode = fr.mode
+        window = teaser_window(clip, source, info)
+        clip.teaser_len = round(window[1] - window[0], 3) if window else 0.0
         captions.write_ass(ass, words, clip.start, clip.end, project.caption_style,
-                           clip.caption_opts or None, clip.custom_captions)
+                           clip.caption_opts or None, clip.custom_captions, offset=clip.teaser_len)
         clip.ass_path = ass.name
         for p in (final,):
             if p.exists():
                 p.unlink()
         render.render_raw(source, clip.start, clip.end, fr.filter, raw, has_audio=info.get("has_audio", True),
                           cwd=out_dir)
+        if window:
+            tmp = out_dir / f"{base}_teaser.mp4"
+            render.add_teaser(raw, window[0], window[1], tmp, has_audio=media.probe(raw)["has_audio"])
+            tmp.replace(raw)
         clip.raw_path = raw.name
         media.thumbnail(raw, thumb, at=min(1.0, clip.duration / 2))
         clip.thumb_path = thumb.name if thumb.exists() else None
@@ -275,8 +316,12 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
         dur = info.get("duration") or 0
         # korte bron, of een Twitch-clip (max ±60 s): altijd in zijn geheel, ongeacht de max. duur
         whole = 1.0 < dur <= project.max_dur + 0.5 or (project.source_type == "twitch" and 1.0 < dur <= 120)
+        from app.core.store import user_settings as _us
+
+        teaser_default = bool(_us(db, project.owner_id).hook_teaser)
         if not project.clips and whole:
             db.add(Clip(
+                teaser=teaser_default,
                 project_id=project.id, owner_id=project.owner_id, index=1, start=0.0, end=round(dur, 2),
                 title=(project.title or "Clip")[:120], hook="", reason="Korte bron: in zijn geheel gebruikt.",
                 source="volledig", subscores_json=json.dumps({k: 6 for k in (
@@ -295,7 +340,8 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
             lang = user_settings(db, project.owner_id).post_language or "en"
             picked, method, warning = pick_clips(
                 transcript, project.num_clips, project.min_dur, project.max_dur, cfg,
-                post_language=lang, meta=meta, insights=_insights(db, project.owner_id), **pick_kwargs,
+                post_language=lang, meta=meta, insights=_insights(db, project.owner_id), **_trend_kw(db, project),
+                **pick_kwargs,
             )
             project.llm_model = meta.get("model") if method == "llm" else None
             project.picker_used = method
@@ -317,6 +363,9 @@ def process_project(db: Session, project_id: int, **pick_kwargs) -> None:
                         reason=c["reason"],
                         description=c.get("description", ""),
                         hashtags=c.get("hashtags", ""),
+                        yt_tags=c.get("tags") or None,
+                        hook_at=c.get("peak"),
+                        teaser=teaser_default,
                         category=c["category"],
                         subscores_json=json.dumps(c["subscores"]),
                         source=c["source"],

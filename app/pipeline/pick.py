@@ -336,23 +336,28 @@ SYSTEM_PROMPT = (
 
 
 def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: str = "en",
-                 insights: str = "") -> str:
+                 insights: str = "", trends: str = "") -> str:
     from app.pipeline.copywriting import copy_rules
 
     experience = (
         "ERVARING VAN DIT KANAAL (echte resultaten van eerder geposte clips; gebruik dit als richtlijn bij "
         f"het kiezen en scoren, maar blijf kritisch):\n{insights}\n\n" if insights else ""
     )
+    if trends:
+        experience = trends + "\n\n" + experience
     return experience + (
         f"Kies maximaal {n} fragmenten van {min_dur:.0f} tot {max_dur:.0f} seconden uit dit "
         "transcript (tijden in seconden tussen haken). Geef JSON in de vorm:\n"
         '{"clips": [{"start": 12.3, "end": 45.6, "title": "posttitel", '
         '"description": "beschrijving bij de post", "hashtags": ["#voorbeeld", "#shorts"], '
-        '"hook": "de openingszin", "reason": "waarom dit werkt", '
+        '"tags": ["verborgen youtube-tag", "..."], '
+        '"hook": "de openingszin", "piek": 23.4, "reason": "waarom dit werkt", '
         f'"category": "een van {"/".join(CATEGORIES)}", '
         '"hook_sterkte": 1-10, "emotie_of_verrassing": 1-10, '
         '"begrijpelijkheid_zonder_context": 1-10, "afronding": 1-10}]}\n'
-        "Wees streng met de scores. " + copy_rules(language) + "\n\n"
+        "Laat elk fragment beginnen op een moment dat meteen pakt (geen aanloop, groet of stilte). "
+        "'piek' is de tijd (in seconden, zoals in het transcript) van het sterkste moment: de clou, reactie of "
+        "climax. Wees streng met de scores. " + copy_rules(language) + "\n\n"
         f"TRANSCRIPT:\n{chunk}"
     )
 
@@ -362,6 +367,15 @@ def _num(v, default: float) -> float:
         return float(v)
     except (TypeError, ValueError):
         return default
+
+
+def _peak(v, start: float, end: float) -> float | None:
+    """Piekmoment van de LLM, alleen als het binnen het fragment valt (niet in de eerste/laatste seconde)."""
+    try:
+        t = float(v)
+    except (TypeError, ValueError):
+        return None
+    return round(t, 2) if start + 1.0 <= t <= end - 0.5 else None
 
 
 def llm_pick(
@@ -376,8 +390,9 @@ def llm_pick(
     post_language: str = "en",
     meta: dict | None = None,
     insights: str = "",
+    trends: str = "",
 ) -> list[dict]:
-    from app.pipeline.copywriting import clean_description, clean_title, normalize_hashtags
+    from app.pipeline.copywriting import clean_description, clean_title, normalize_hashtags, normalize_tags
 
     words = all_words(transcript)
     sents = sentences(words)
@@ -392,7 +407,7 @@ def llm_pick(
             cfg,
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language, insights)},
+                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language, insights, trends)},
             ],
             client=client,
             sleep=sleep,
@@ -416,6 +431,8 @@ def llm_pick(
                     "title": clean_title(it.get("title"), "Clip"),
                     "description": clean_description(it.get("description")),
                     "hashtags": normalize_hashtags(it.get("hashtags")),
+                    "tags": normalize_tags(it.get("tags")),
+                    "peak": _peak(it.get("piek"), snapped[0], snapped[1]),
                     "hook": str(it.get("hook") or "")[:300],
                     "reason": str(it.get("reason") or "")[:500],
                     "category": cat if cat in CATEGORIES else "overig",
