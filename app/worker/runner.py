@@ -76,6 +76,17 @@ def run_job_once(kinds: tuple[str, ...] | None = None, exclude: tuple[str, ...] 
         db.close()
 
 
+def run_compilation_once(upload: bool = False) -> bool:
+    """Render (hoofdworker) of upload (uploadworkers) de volgende compilatie. False als er niets is."""
+    from app.pipeline import compile as cp
+
+    db = new_session()
+    try:
+        return cp.run_next_upload(db) if upload else cp.run_next_render(db)
+    finally:
+        db.close()
+
+
 class Worker:
     def __init__(self) -> None:
         self._stop = threading.Event()
@@ -89,6 +100,9 @@ class Worker:
             n = queue.recover(db)
             if n:
                 log.info("%s onderbroken job(s) opnieuw in de wachtrij gezet", n)
+            from app.pipeline import compile as cp
+
+            cp.recover(db)
         finally:
             db.close()
         self._thread = threading.Thread(target=self._loop, name="shortcutter-worker", daemon=True)
@@ -103,7 +117,7 @@ class Worker:
     def _upload_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                if run_job_once(kinds=UPLOAD_KINDS):
+                if run_job_once(kinds=UPLOAD_KINDS) or run_compilation_once(upload=True):
                     continue
             except Exception:
                 log.exception("Fout in de upload-lus")
@@ -125,7 +139,7 @@ class Worker:
                 if time.monotonic() - self._last_stats > STATS_EVERY:
                     self._last_stats = time.monotonic()
                     sync_all_stats()
-                if run_job_once(exclude=UPLOAD_KINDS):
+                if run_job_once(exclude=UPLOAD_KINDS) or run_compilation_once():
                     continue
             except Exception:
                 log.exception("Fout in de worker-lus")

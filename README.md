@@ -191,6 +191,28 @@ Hiervoor heeft de beheerder een gratis Twitch-app nodig: maak er een op `dev.twi
 > streamer, en voeg zelf iets toe (ondertitels, selectie, titel): zonder toestemming riskeer je claims of strikes, en
 > YouTube kan herplaatste content demonetiseren.
 
+## Compilaties (lange video's)
+
+Onder **Compilaties** maak je van de best bekeken Twitch-clips één liggende video
+(16:9, 1920×1080) voor YouTube, bijvoorbeeld een wekelijkse "Best clips of the week".
+
+1. Kies een of meer kanalen uit je lijst (eigen kanaal of met toestemming), de
+   periode, het aantal clips en de volgorde (aflopend #10 → #1, beste eerst of zonder nummers).
+2. Shortcutter zet de meest bekeken clips klaar. Je kunt clips aan- en uitvinken, de
+   volgorde aanpassen, de titel in beeld wijzigen, per clip begin en eind instellen en
+   losse cliplinks toevoegen.
+3. **Renderen**: per clip een balk linksonder met nummer, titel en kanaal, korte fades
+   en gelijk geluidsniveau. Optioneel een introscherm (3 s) en een eindscherm met
+   credits (4 s). Het beeld wordt nooit bijgesneden: andere verhoudingen krijgen zwarte randen.
+4. Titel en beschrijving worden automatisch geschreven, met hoofdstukken (tijden) en
+   credits per streamer. YouTube toont hoofdstukken alleen bij minstens 3 stuks van
+   minstens 10 seconden.
+5. Download de mp4 of upload hem via je gekoppelde YouTube-kanaal (direct of ingepland).
+
+Let op: compilaties van andermans clips ziet YouTube snel als "hergebruikte content",
+wat het te gelde maken van je kanaal kan bemoeilijken. Eigen commentaar of eigen
+inbreng helpt.
+
 ## Uploaden naar YouTube
 
 Gebruikers kunnen hun eigen YouTube-kanaal koppelen (**Mijn account**) en clips direct uploaden of een selectie
