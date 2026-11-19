@@ -1,5 +1,8 @@
+<nav class="upload-filter" aria-label="Filter op upload">
+  {% for k, label in upload_filters.items() %}<a class="btn btn-sm {{ 'btn-primary' if upload == k }}" href="/?scope={{ scope }}{% if k %}&upload={{ k }}{% endif %}">{{ label }}</a>{% endfor %}
+</nav>
 <div id="project-list" class="project-list">
   {% if projects %}{% include "partials/project_page.html" %}
-  {% else %}<div class="card empty">Nog geen projecten. Begin hierboven met een link of een bestand.</div>{% endif %}
+  {% else %}<div class="card empty">{% if upload == 'open' %}Alles is geüpload.{% elif upload == 'gepost' %}Nog niets geüpload.{% else %}Nog geen projecten. Begin hierboven met een link of een bestand.{% endif %}</div>{% endif %}
 </div>
 {% include "partials/project_poller.html" %}
