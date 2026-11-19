@@ -34,12 +34,12 @@
         <div class="field"><label for="c-period">Periode</label>
           <select id="c-period" name="period">{% for k, v in periods.items() %}<option value="{{ k }}" {% if k == 'week' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
         <div class="field"><label for="c-count">Aantal clips</label>
-          <select id="c-count" name="count">{% for n in counts %}<option value="{{ n }}" {% if n == 10 %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+          <input id="c-count" name="count" type="number" min="2" max="{{ max_items }}" step="1" value="10" inputmode="numeric" required></div>
       </div>
         <div class="field"><label for="c-rank">Volgorde</label>
           <select id="c-rank" name="ranking">{% for k, v in rankings.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
       <button class="btn btn-primary" type="submit" {% if not has_key %}disabled{% endif %}>Clips zoeken en klaarzetten</button>
-      <p class="hint">Je kunt daarna de volgorde, selectie en begin/eind per clip nog aanpassen voordat je rendert.</p>
+      <p class="hint">Aantal: 2 tot {{ max_items }}. Je kunt daarna de volgorde, selectie en begin/eind per clip nog aanpassen voordat je rendert.</p>
     </form>
     {% else %}
     <p class="muted">Voeg eerst een kanaal toe op de <a href="/twitch">Twitch-pagina</a> (eigen kanaal of met toestemming van de streamer).</p>
@@ -68,7 +68,7 @@
           <div class="field"><label for="w-hour">Tijd</label>
             <select id="w-hour" name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if h == sched.hour %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></div>
           <div class="field"><label for="w-count">Aantal clips</label>
-            <select id="w-count" name="count">{% for n in counts %}<option value="{{ n }}" {% if n == sched.count %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+            <input id="w-count" name="count" type="number" min="2" max="{{ max_items }}" step="1" value="{{ sched.count }}" inputmode="numeric" required></div>
           <div class="field"><label for="w-rank">Volgorde</label>
             <select id="w-rank" name="ranking">{% for k, v in rankings.items() %}<option value="{{ k }}" {% if k == sched.ranking %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
         </div>

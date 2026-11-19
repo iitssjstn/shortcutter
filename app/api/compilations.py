@@ -24,7 +24,6 @@ from app.pipeline import weekly
 from app.pipeline.download import twitch_clip_slug
 
 router = APIRouter()
-COUNTS = (5, 8, 10, 15, 20)
 BUSY = ("queued", "rendering")
 
 
@@ -50,7 +49,7 @@ def list_page(request: Request, user: User = Depends(require_user), db: Session 
         "nav": "compilations", "comps": comps, "channels": _channels(db, user),
         "sched": sched, "weekdays": weekly.WEEKDAYS, "next_run": weekly.next_slot(sched) if sched.enabled else None,
         "has_key": twitch.credential(db) is not None, "periods": twitch.PERIOD_LABELS,
-        "counts": COUNTS, "rankings": cp.RANKINGS,
+        "max_items": cp.MAX_ITEMS, "rankings": cp.RANKINGS,
     })
 
 

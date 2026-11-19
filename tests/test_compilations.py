@@ -219,3 +219,31 @@ def test_twitch_preview_buttons(admin_client, fake):
     page = c.get(r.headers["location"]).text
     assert 'data-twitch-clip="SlugTwee-def"' in page
     assert "frame-src https://clips.twitch.tv" in c.get("/").headers["content-security-policy"]
+
+
+def test_custom_clip_count(admin_client, fake):
+    from app.core.models import CompilationSchedule
+
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    page = c.get("/compilations").text
+    assert 'name="count" type="number" min="2" max="100"' in page
+    for i in range(30):
+        fake.clips["123"].append({"id": f"Extra{i}", "url": f"https://clips.twitch.tv/Extra{i}", "title": f"Extra {i}",
+                                  "view_count": 100 + i, "duration": 10.0, "broadcaster_id": "123",
+                                  "broadcaster_name": "Streamer"})
+    r = c.post("/compilations", data={"channel_ids": [str(ch.id)], "count": "25"})
+    db = new_session()
+    comp = db.get(Compilation, int(r.headers["location"].rsplit("/", 1)[1]))
+    assert len(comp.items) == 25  # meer dan de oude grens van 20
+    db.close()
+    c.post("/compilations/schedule", data={"channel_ids": [str(ch.id)], "count": "250"})
+    c.post("/compilations/schedule", data={"channel_ids": [str(ch.id)], "count": "1"})
+    db = new_session()
+    assert db.scalar(select(CompilationSchedule)).count == 2
+    db.close()
+    c.post("/compilations/schedule", data={"channel_ids": [str(ch.id)], "count": "250"})
+    db = new_session()
+    assert db.scalar(select(CompilationSchedule)).count == cp.MAX_ITEMS
+    db.close()
