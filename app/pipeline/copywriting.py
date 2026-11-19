@@ -31,12 +31,20 @@ def copy_rules(lang: str = "en") -> str:
         "hooguit één emoji als het echt past. "
         "BESCHRIJVING: 1 à 2 korte zinnen die de kijker laten blijven kijken of reageren (bijv. een vraag). "
         "HASHTAGS: 3 tot 5 relevante hashtags, inclusief #shorts. "
+        "TAGS: 8 tot 15 verborgen YouTube-tags (zonder #): namen van game, streamer en wat er gebeurt, plus "
+        "zoektermen die mensen echt gebruiken; ook gangbare schrijfwijzen of spelfouten van namen. "
         + _LANG_RULE.get(lang, _LANG_RULE["en"])
         + " De hook is een letterlijk citaat in de originele taal; de reden schrijf je in het Nederlands."
     )
 
 
 COPY_RULES = copy_rules("en")
+
+
+def normalize_tags(raw) -> str:
+    from app.estimation.trends import normalize_tags as _n
+
+    return _n(raw)
 
 
 def normalize_hashtags(raw) -> str:
@@ -74,6 +82,7 @@ def generate_post_texts(
     language: str = "en",
     meta: dict | None = None,
     insights: str = "",
+    trends: str = "",
 ) -> dict[int, dict]:
     """items: [{'id', 'text', 'title', optioneel 'before', 'context', 'frames', 'title_unreliable', 'duration'}].
 
@@ -90,7 +99,10 @@ def generate_post_texts(
     intro = ("Schrijf voor elke clip hieronder een posttekst. " + copy_rules(language) + "\n"
              "Gebruik vooral de beelden en de gesproken tekst. Titels die als ONBETROUWBAAR gemarkeerd zijn, zijn door "
              "kijkers bedacht en vaak willekeurig: neem ze niet over. Noem de game alleen als die bekend is.\n"
-             'Geef JSON: {"clips": [{"id": 1, "title": "...", "description": "...", "hashtags": ["#a", "#b"]}]}')
+             'Geef JSON: {"clips": [{"id": 1, "title": "...", "description": "...", "hashtags": ["#a", "#b"], '
+             '"tags": ["tag 1", "tag 2"]}]}')
+    if trends:
+        intro = trends + "\n\n" + intro
     if insights:
         intro = ("ERVARING VAN DIT KANAAL (echte resultaten; schrijf titels en beschrijvingen in de stijl van wat "
                  "goed werkte en vermijd wat slecht werkte):\n" + insights + "\n\n" + intro)
@@ -146,6 +158,7 @@ def generate_post_texts(
             "title": clean_title(row.get("title"), known[cid].get("title") or "Clip"),
             "description": clean_description(row.get("description")),
             "hashtags": normalize_hashtags(row.get("hashtags")),
+            "tags": normalize_tags(row.get("tags")),
         }
     if not out:
         raise LLMError("De LLM gaf geen bruikbare posttekst terug.", "error")

@@ -61,3 +61,26 @@ def burn_subtitles(raw: Path, ass: Path, out: Path) -> Path:
     if not out.exists() or out.stat().st_size == 0:
         raise RenderError("ffmpeg gaf geen uitvoerbestand bij het inbranden van de ondertitels.")
     return out
+
+
+def add_teaser(raw: Path, a: float, b: float, out: Path, has_audio: bool = True) -> Path:
+    """Zet het stuk [a, b] (clip-tijden) van `raw` kort vooraan, gevolgd door de hele clip.
+
+    Zo ziet de kijker in de eerste seconde al het sterkste moment ('wacht hierop').
+    """
+    fo = max(0.0, (b - a) - 0.12)
+    vf = (f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS,fade=t=out:st={fo:.3f}:d=0.12[tv];"
+          "[0:v]setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.12[mv];")
+    if has_audio:
+        vf += (f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS,afade=t=out:st={fo:.3f}:d=0.12[ta];"
+               "[0:a]asetpts=PTS-STARTPTS[ma];[tv][ta][mv][ma]concat=n=2:v=1:a=1[v][a]")
+        maps = ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
+    else:
+        vf += "[tv][mv]concat=n=2:v=1:a=0[v]"
+        maps = ["-map", "[v]", "-an"]
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-nostdin", "-i", str(Path(raw).resolve()),
+           "-filter_complex", vf, *maps, *X264, "-movflags", "+faststart", str(Path(out).resolve())]
+    _run(cmd)
+    if not out.exists() or out.stat().st_size == 0:
+        raise RenderError("ffmpeg gaf geen uitvoerbestand (teaser).")
+    return out

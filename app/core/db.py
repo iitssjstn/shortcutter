@@ -48,6 +48,12 @@ def init_db(db_path: str) -> Engine:
 # Kolommen die later zijn toegevoegd: (tabel, kolom, SQL-type met default)
 _ADDED_COLUMNS = [
     ("compilations", "auto", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("compilations", "yt_tags", "TEXT"),
+    ("clips", "yt_tags", "TEXT"),
+    ("clips", "hook_at", "FLOAT"),
+    ("clips", "teaser", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("clips", "teaser_len", "FLOAT NOT NULL DEFAULT 0"),
+    ("user_settings", "hook_teaser", "BOOLEAN NOT NULL DEFAULT 1"),
     ("compilations", "format", "VARCHAR(10) NOT NULL DEFAULT 'landscape'"),
     ("compilation_schedules", "format", "VARCHAR(10) NOT NULL DEFAULT 'landscape'"),
     ("jobs", "attempts", "INTEGER NOT NULL DEFAULT 0"),

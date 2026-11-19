@@ -25,6 +25,8 @@
           {% for k, label in post_languages.items() %}<option value="{{ k }}" {% if us.post_language == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
         <div class="hint">De ondertitels blijven altijd in de taal van de video.</div></div>
+      <label class="row" style="font-weight:500;margin-bottom:.2rem"><input type="checkbox" name="hook_teaser" value="1" {% if us.hook_teaser %}checked{% endif %}> Sterkste moment kort vooraan (teaser)</label>
+      <div class="hint" style="margin-bottom:.85rem">Nieuwe clips beginnen met ±2 seconden van het sterkste moment (de clou of reactie), daarna de clip vanaf het begin. Zo houd je kijkers in de eerste seconde vast. Per clip uit te zetten.</div>
       <div class="field"><label for="caption_style">Ondertitelstijl</label>
         <select id="caption_style" name="caption_style">
           {% for k, label in caption_styles.items() %}<option value="{{ k }}" {% if us.caption_style == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
@@ -71,6 +73,8 @@
           <div class="hint">Korte teksten schrijven: een snel en goedkoop model is genoeg.</div></div>
         <input type="hidden" name="llm_vision_present" value="1">
         <label class="row" style="font-weight:500;margin-bottom:.2rem"><input type="checkbox" name="llm_vision" value="1" {% if g.llm_vision != '0' %}checked{% endif %}> Beelden uit de clip meesturen bij titels en beschrijvingen</label>
+        <label class="row" style="font-weight:500;margin-bottom:.2rem"><input type="checkbox" name="trend_tags" value="1" {% if g.trend_tags != '0' %}checked{% endif %}> Tags en hashtags afstemmen op wat nu werkt op YouTube</label>
+        <p class="hint" style="margin-top:0">Zoekt de best bekeken video's van de afgelopen 30 dagen over dezelfde game/streamer en geeft hun tags, hashtags en titels mee aan de AI. Gebruikt de YouTube-koppeling of API-sleutel; kost 100 van de 10.000 quota-eenheden per onderwerp per dag (24 uur bewaard).</p>
         <p class="hint" style="margin-top:0">De AI ziet dan 3 stilstaande beelden per clip, zodat de tekst klopt met wat er gebeurt (ook als er weinig gezegd wordt). Kost iets meer per verzoek; modellen zonder beeldherkenning vallen automatisch terug op alleen tekst.</p>
         <p class="hint" style="margin-top:-.4rem">
           Leeg = het model van de actieve configuratie bij <a href="/keys">API-sleutels</a>{% if active_llm_model %} (<code>{{ active_llm_model }}</code>){% endif %}.

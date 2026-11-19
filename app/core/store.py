@@ -14,6 +14,7 @@ GLOBAL_DEFAULTS: dict[str, str] = {
     "llm_model_pick": "",  # leeg = model van de actieve configuratie
     "llm_model_copy": "",
     "llm_vision": "1",  # beelden uit de clip meesturen bij het schrijven van de posttekst
+    "trend_tags": "1",  # tags/hashtags/titels van best bekeken YouTube-video's over hetzelfde onderwerp meegeven
     "max_active_per_user": "0",  # 0 = onbeperkt
     "source_retention_days": "7",  # 0 = nooit verwijderen
     "project_retention_days": "0",  # 0 = clips altijd bewaren

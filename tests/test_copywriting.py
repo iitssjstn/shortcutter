@@ -40,7 +40,8 @@ def test_prompt_asks_english_by_default():
 
     out = cw.generate_post_texts(LLMConfig("https://x/v1", "m", "k"), [{"id": 7, "text": "Waarom begint niemand?", "title": "w"}],
                                  client=_llm(handler), sleep=lambda s: None)
-    assert out[7] == {"title": "Why nobody starts", "description": "Do you agree?", "hashtags": "#motivation #shorts"}
+    assert out[7] == {"title": "Why nobody starts", "description": "Do you agree?", "hashtags": "#motivation #shorts",
+                      "tags": ""}  # geen tags gevraagd in dit antwoord
     assert "ENGELS" in seen["body"]["messages"][1]["content"]
     assert "NEDERLANDS" in cw.copy_rules("nl")
 

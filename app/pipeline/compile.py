@@ -373,8 +373,29 @@ def compose_description(intro: str, comp: Compilation) -> str:
     return "\n\n".join(parts)
 
 
-def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str]:
-    """(titel, intro-tekst, hashtags). Met LLM als die is ingesteld, anders een nette standaard."""
+def comp_trends(db: Session, comp: Compilation) -> str:
+    """Promptregels met wat nu werkt op YouTube voor de game/streamer(s) van deze compilatie."""
+    from collections import Counter
+
+    from app.estimation import trends
+
+    items = comp.included
+    games = Counter(i.game for i in items if i.game)
+    streamers = Counter(i.streamer for i in items if i.streamer)
+    meta = {"game": games.most_common(1)[0][0] if games else "",
+            "streamer": streamers.most_common(1)[0][0] if len(streamers) == 1 else ""}
+    try:
+        return trends.prompt_text(trends.fetch(db, comp.owner_id, trends.query_from_meta(meta, comp.title.replace("*", "")),
+                                               short=comp.format == "short"))
+    except Exception:  # noqa: BLE001
+        log.warning("Trends voor compilatie %s niet beschikbaar", comp.id)
+        return ""
+
+
+def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str, str]:
+    """(titel, intro-tekst, hashtags, verborgen tags). Met LLM als die is ingesteld, anders een nette standaard."""
+    from app.estimation.trends import normalize_tags
+
     from app.core.keys import load_llm_config
     from app.pipeline import pick
     from app.pipeline.errors import LLMError
@@ -394,13 +415,16 @@ def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str]:
                           + (f" in {', '.join(games[:3])}" if games else "") + ". Which one was your favorite?")
     fallback_tags = _hashtags(short=short, raw=["twitch", "twitchclips"] + [s.replace(" ", "") for s in streamers[:2]]
                               + [g.replace(" ", "") for g in games[:1]])
+    fallback_yt = normalize_tags(["twitch clips"] + streamers[:3] + games[:2]
+                                 + [f"{s} {g}" for s in streamers[:1] for g in games[:1]])
     cfg = load_llm_config(db, "copy")
     if cfg is None:
-        return fallback_title, fallback_intro, fallback_tags
+        return fallback_title, fallback_intro, fallback_tags, fallback_yt
     lines = "\n".join(
         f"- {item_label(it, rank_of(comp.ranking, k, n))} | {it.views} views" + (f" | game: {it.game}" if it.game else "")
         for k, it in enumerate(items))
     language = "Nederlands" if lang == "nl" else "English"
+    trend = comp_trends(db, comp)
     messages = [
         {"role": "system", "content": "You write YouTube titles and descriptions for Twitch clip compilations "
                                       + ("(a vertical YouTube Short with a top-N ranking). " if short else "(long-form, landscape). ")
@@ -412,17 +436,19 @@ def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str]:
             "- description: 2-3 short sentences that make people want to watch; do NOT list chapters or links "
             "(those are added automatically).\n"
             + ("- hashtags: 3-5 relevant hashtags.\n" if short else "- hashtags: 3-5 relevant hashtags (no #shorts).\n")
+            + "- tags: 8-15 hidden YouTube tags (no #): game, streamer names (incl. common spellings), what happens, "
+            "search terms people really use.\n"
             + 'JSON: {"title": "...", "description": "...", "hashtags": ["#..."]}\n\nClips in order:\n' + lines)},
     ]
     try:
         out = pick.chat_json(cfg, messages, retries=2, timeout=60.0)
     except LLMError as exc:
         log.warning("Compilatietekst via LLM mislukt: %s", exc)
-        return fallback_title, fallback_intro, fallback_tags
+        return fallback_title, fallback_intro, fallback_tags, fallback_yt
     title = _ff_text(str(out.get("title") or ""), 100) or fallback_title
     intro = str(out.get("description") or "").strip()[:1500] or fallback_intro
     tags = _hashtags(out.get("hashtags"), short) or fallback_tags
-    return title, intro, tags
+    return title, intro, tags, normalize_tags(out.get("tags")) or fallback_yt
 
 
 # ---------------------------------------------------------------- render
@@ -528,9 +554,10 @@ def render_compilation(db: Session, cid: int) -> None:
     # 4. titel en beschrijving (alleen invullen als de gebruiker nog niets eigens heeft)
     _set(db, comp, 98, "Titel en beschrijving schrijven")
     if not comp.description:
-        title, intro, tags = generate_text(db, comp)
+        title, intro, tags, yt_tags = generate_text(db, comp)
         comp.yt_title = comp.yt_title or title
         comp.hashtags = comp.hashtags or tags
+        comp.yt_tags = comp.yt_tags or yt_tags
         comp.description = compose_description(intro, comp)
     comp.status = "done"
     comp.progress = 100
@@ -636,7 +663,9 @@ def run_upload(db: Session, cid: int) -> bool:
                 note = "De geplande publicatietijd was al voorbij; de video is privé geüpload."
         except ValueError:
             opts["publish_at"] = None
-    tags = [t.lstrip("#") for t in (comp.hashtags or "").split() if t.strip("#")]
+    from app.estimation.trends import upload_tags
+
+    tags = upload_tags(comp.yt_tags, comp.hashtags)
     try:
         res = yt.upload(db, acc, path, title=opts.get("title") or comp.yt_title or comp.title,
                         description=opts.get("description") or "", privacy=opts.get("privacy", "private"),

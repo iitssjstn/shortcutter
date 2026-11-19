@@ -261,6 +261,7 @@ def _start_render(db: Session, comp: Compilation):
     comp.description = None  # opnieuw schrijven met de nieuwe hoofdstukken
     comp.yt_title = None
     comp.hashtags = None
+    comp.yt_tags = None
     comp.updated_at = utcnow()
     db.commit()
     return redirect(f"/compilations/{comp.id}", "Compilatie staat in de wachtrij om te renderen.")
@@ -301,8 +302,11 @@ def thumb(cid: int, user: User = Depends(require_user), db: Session = Depends(ge
 
 @router.post("/compilations/{cid}/text")
 def save_text(cid: int, title: str = Form(""), description: str = Form(""), hashtags: str = Form(""),
-              user: User = Depends(require_user), db: Session = Depends(get_db)):
+              yt_tags: str = Form(""), user: User = Depends(require_user), db: Session = Depends(get_db)):
+    from app.estimation.trends import normalize_tags
+
     comp = _comp(db, user, cid)
+    comp.yt_tags = normalize_tags(yt_tags) or None
     comp.yt_title = title.strip()[: yt.TITLE_MAX] or comp.yt_title
     comp.description = description.strip()[: yt.DESC_MAX]
     comp.hashtags = cp._hashtags(hashtags, comp.format == "short") or None
@@ -319,10 +323,12 @@ def upload(
     publish_at: str = Form(""),
     made_for_kids: str = Form(""),
     hashtags: str = Form(""),
+    yt_tags: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     from app.api.youtube import _parse_local, account_for
+    from app.estimation.trends import normalize_tags
 
     comp = _comp(db, user, cid)
     if account_for(db, user.id) is None:
@@ -342,6 +348,7 @@ def upload(
     comp.yt_title = t
     comp.description = description.strip()[: yt.DESC_MAX]
     comp.hashtags = cp._hashtags(hashtags, comp.format == "short") or comp.hashtags
+    comp.yt_tags = normalize_tags(yt_tags) or comp.yt_tags
     comp.yt_options_json = json.dumps({
         "title": t, "description": comp.description, "privacy": "private" if when else privacy,
         "publish_at": yt.to_rfc3339(when) if when else None, "made_for_kids": made_for_kids in ("1", "on", "true"),

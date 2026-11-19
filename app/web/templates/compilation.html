@@ -51,6 +51,8 @@
     <div class="field"><label for="yt-desc">Beschrijving</label><textarea id="yt-desc" name="description" rows="12">{{ comp.description or '' }}</textarea>
       <p class="hint">Met hoofdstukken (tijden) en credits per streamer. Pas gerust aan.</p></div>
     <div class="field"><label for="yt-tags">Hashtags</label><input id="yt-tags" type="text" name="hashtags" value="{{ comp.hashtags or '' }}"></div>
+    <div class="field"><label for="yt-hidden">Tags (verborgen)</label><input id="yt-hidden" type="text" name="yt_tags" value="{{ comp.yt_tags or '' }}" placeholder="komma-gescheiden">
+      <p class="hint">Afgestemd op wat nu werkt op YouTube voor deze game/streamer (als dat aan staat bij Instellingen).</p></div>
     {% if yt_account %}
     <div class="form-3">
       <div class="field"><label for="yt-priv">Zichtbaarheid</label>

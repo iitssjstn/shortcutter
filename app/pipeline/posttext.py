@@ -75,6 +75,18 @@ def build_items(project: Project, clips: list[Clip], with_frames: bool) -> list[
     return items
 
 
+def project_trends(db: Session, project: Project) -> str:
+    """Promptregels met wat nu werkt op YouTube voor deze game/streamer ('' als uit of niet beschikbaar)."""
+    from app.estimation import trends
+
+    try:
+        return trends.prompt_text(trends.fetch(db, project.owner_id,
+                                               trends.query_from_meta(project.source_meta, project.title)))
+    except Exception:  # noqa: BLE001 - trends zijn een extraatje
+        log.warning("Trends voor project %s niet beschikbaar", project.id)
+        return ""
+
+
 def generate_for_clips(db: Session, project: Project, clips: list[Clip]) -> tuple[int, str | None]:
     """Schrijf posttekst voor `clips`. Geeft (aantal bijgewerkt, foutmelding of None)."""
     cfg = load_llm_config(db, "copy")
@@ -87,13 +99,14 @@ def generate_for_clips(db: Session, project: Project, clips: list[Clip]) -> tupl
     from app.pipeline.run import _insights
 
     insights = _insights(db, project.owner_id)
+    trends = project_trends(db, project)
     batch_size = 4 if with_frames else 10
     done = 0
     for i in range(0, len(clips), batch_size):
         batch = clips[i: i + batch_size]
         items = build_items(project, batch, with_frames)
         try:
-            result = generate_post_texts(cfg, items, language=lang, insights=insights)
+            result = generate_post_texts(cfg, items, language=lang, insights=insights, trends=trends)
         except LLMError as exc:
             db.commit()
             return done, f"Posttekst genereren mislukt: {exc}"
@@ -101,6 +114,8 @@ def generate_for_clips(db: Session, project: Project, clips: list[Clip]) -> tupl
             r = result.get(c.id)
             if r:
                 c.title, c.description, c.hashtags = r["title"], r["description"], r["hashtags"]
+                if r.get("tags"):
+                    c.yt_tags = r["tags"]
                 done += 1
     db.commit()
     return done, None
