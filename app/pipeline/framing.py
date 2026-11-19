@@ -352,7 +352,7 @@ def blur_filter() -> str:
 def estimate_facecam(face: tuple[float, float, float], src_w: int, src_h: int) -> tuple[float, float, float, float]:
     """Ruwe schatting van een facecam (4:3) rond een klein gezicht, binnen het beeld."""
     cx, cy, size = face
-    w_px = size * src_w * 4.0
+    w_px = size * src_w * 5.5  # ruim: liever wat achtergrond dan alleen een gezicht
     h_px = min(src_h, w_px * 0.75)
     x = min(max(0.0, cx * src_w - w_px / 2), src_w - w_px)
     y = min(max(0.0, cy * src_h - h_px * 0.42), src_h - h_px)
@@ -380,6 +380,33 @@ def _fit(rect, src_w: int, src_h: int, aspect: float) -> tuple[int, int, int, in
 def split_heights(top: float) -> tuple[int, int]:
     top_h = _even(OUT_H * max(0.2, min(0.6, float(top))))
     return top_h, OUT_H - top_h
+
+
+def auto_top(cam: tuple[float, float, float, float], src_w: int, src_h: int) -> float:
+    """Hoogte van het facecam-vak (deel van 1920) zodat het hele kader past, zonder extra inzoomen.
+
+    Een 4:3-webcam wordt ~810 px hoog, een 16:9-webcam ~610 px; begrensd zodat de gameplay
+    altijd minstens 55% van het beeld houdt.
+    """
+    cw, ch = max(1.0, cam[2] * src_w), max(1.0, cam[3] * src_h)
+    return round(max(0.28, min(0.45, OUT_W * ch / cw / OUT_H)), 3)
+
+
+def auto_split_layout(src_w: int, src_h: int, cam, face=None, game_x: float = 0.5) -> dict:
+    """Automatische gesplitste indeling: het hele facecam-kader boven, gameplay (volle hoogte) onder."""
+    top = auto_top(cam, src_w, src_h)
+    top_h, bot_h = split_heights(top)
+    cw, ch, cx, cy = _fit(cam, src_w, src_h, OUT_W / top_h)
+    if face is not None:  # bij bijsnijden het gezicht in beeld houden
+        bx, by, bw, bh = cam[0] * src_w, cam[1] * src_h, cam[2] * src_w, cam[3] * src_h
+        cx = int(min(max(bx, face[0] * src_w - cw / 2), bx + bw - cw)) // 2 * 2 if cw < bw else cx
+        cy = int(min(max(by, face[1] * src_h - ch * 0.45), by + bh - ch)) // 2 * 2 if ch < bh else cy
+        cx, cy = max(0, min(src_w - cw, cx)), max(0, min(src_h - ch, cy))
+    gh = src_h // 2 * 2
+    gw = _even(min(src_w, gh * OUT_W / bot_h))
+    gx = max(0, min(src_w - gw, int(game_x * src_w - gw / 2))) // 2 * 2
+    return {"type": "split", "cam": _px_to_frac((cw, ch, cx, cy), src_w, src_h),
+            "game": _px_to_frac((gw, gh, gx, 0), src_w, src_h), "top": top}
 
 
 def layout_filter(src_w: int, src_h: int, layout: dict) -> str:
@@ -501,11 +528,9 @@ def choose_framing(
                 note = "geschat"
         if cam is not None:
             fpos = face[:2] if face and cam[0] <= face[0] <= cam[0] + cam[2] and cam[1] <= face[1] <= cam[1] + cam[3] else None
-            cam_px, game_px = split_regions(src_w, src_h, cam, fpos, game_x)
-            return Framing("split", split_filter(src_w, src_h, cam, fpos, game_x), max(ratio, 0.0), cam[0] + cam[2] / 2,
-                           note=note, layout={"type": "split", "cam": _px_to_frac(cam_px, src_w, src_h),
-                                              "game": _px_to_frac(game_px, src_w, src_h),
-                                              "top": round(SPLIT_TOP_H / OUT_H, 3)})
+            layout = auto_split_layout(src_w, src_h, cam, fpos, game_x)
+            return Framing("split", layout_filter(src_w, src_h, layout), max(ratio, 0.0), cam[0] + cam[2] / 2,
+                           note=note, layout=layout)
         if hits and face is not None and face[2] > BIG_FACE:
             # groot gezicht zonder overlay: een webcam-shot -> vullen en volgen
             fr = _tracked(src_w, src_h, track, cmd_file, ratio)

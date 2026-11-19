@@ -342,7 +342,8 @@ def test_estimate_facecam_stays_in_frame():
 def test_split_with_manual_box(tmp_path, sample_video, monkeypatch):
     monkeypatch.setattr(framing, "_detector", lambda: _FixedFace([]))
     fr = framing.choose_framing(sample_video, 1280, 720, 0, 3, force_mode="split", facecam_box=(0.0, 0.0, 0.3, 0.3))
-    assert fr.mode == "split" and "crop=346:216:18:0" in fr.filter
+    # hele 16:9-kader (384x216) boven, zonder extra inzoomen
+    assert fr.mode == "split" and "crop=380:212:0:0" in fr.filter and fr.layout["top"] == 0.316
     out = render.render_raw(sample_video, 0.5, 2.5, fr.filter, tmp_path / "clip_01_raw.mp4")
     assert (media.probe(out)["width"], media.probe(out)["height"]) == (1080, 1920)
 
@@ -355,3 +356,18 @@ def test_split_without_face_falls_back_to_fill(sample_video, monkeypatch):
 
 def test_split_vertical_source_stays_vertical(sample_video):
     assert framing.choose_framing(sample_video, 720, 1280, 0, 3, force_mode="split").mode == "vertical"
+
+
+def test_auto_split_keeps_whole_facecam():
+    # 4:3-facecam linksboven: het hele kader past, geen extra inzoomen
+    cam = (0.0, 0.0, 0.3, 0.4)  # 576x432 px bij 1920x1080
+    lay = framing.auto_split_layout(1920, 1080, cam, (0.15, 0.2))
+    assert abs(lay["top"] - 0.422) < 0.01  # ~810 px van 1920
+    x, y, w, h = lay["cam"]
+    assert w >= 0.29 and h >= 0.39  # (vrijwel) het volledige kader
+    gx, gy, gw, gh = lay["game"]
+    assert gh == 1.0 and 0 <= gx and gx + gw <= 1.0
+    # een heel brede of heel hoge facecam blijft binnen de grenzen
+    assert framing.auto_top((0, 0, 0.5, 0.1), 1920, 1080) == 0.28
+    assert framing.auto_top((0, 0, 0.1, 0.5), 1920, 1080) == 0.45
+    assert "vstack" in framing.layout_filter(1920, 1080, lay)
