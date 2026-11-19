@@ -20,20 +20,24 @@
       <a href="/twitch" class="{{ 'active' if nav == 'twitch' }}">Twitch</a>
       <a href="/compilations" class="{{ 'active' if nav == 'compilations' }}">Compilaties</a>
       <a href="/stats" class="{{ 'active' if nav == 'stats' }}">Statistieken</a>
-      <a href="/settings" class="{{ 'active' if nav == 'settings' }}">Instellingen</a>
-      {% if user.is_admin %}
-      <a href="/keys" class="{{ 'active' if nav == 'keys' }}">API-sleutels</a>
-      <a href="/users" class="{{ 'active' if nav == 'users' }}">Gebruikers</a>
-      {% endif %}
-      <a href="/account" class="{{ 'active' if nav == 'account' }}">Mijn account</a>
     </nav>
-    <div class="userbox">
-      <span class="who muted">{{ user.username }}{% if user.is_admin %} <span class="badge">admin</span>{% endif %}</span>
-      <form method="post" action="/logout" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn btn-sm" type="submit">Uitloggen</button>
-      </form>
-    </div>
+    <details class="usermenu">
+      <summary class="{{ 'active' if nav in ('account', 'settings', 'keys', 'users') }}" aria-label="Accountmenu">
+        <span class="who">{{ user.username }}</span>{% if user.is_admin %} <span class="badge">admin</span>{% endif %}<span class="caret" aria-hidden="true"></span>
+      </summary>
+      <div class="usermenu-list">
+        <a href="/account" class="{{ 'active' if nav == 'account' }}">Mijn account</a>
+        <a href="/settings" class="{{ 'active' if nav == 'settings' }}">Instellingen</a>
+        {% if user.is_admin %}
+        <a href="/keys" class="{{ 'active' if nav == 'keys' }}">API-sleutels</a>
+        <a href="/users" class="{{ 'active' if nav == 'users' }}">Gebruikers</a>
+        {% endif %}
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit">Uitloggen</button>
+        </form>
+      </div>
+    </details>
   </div>
 </header>
 {% endif %}
