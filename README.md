@@ -227,6 +227,22 @@ Let op: compilaties van andermans clips ziet YouTube snel als "hergebruikte cont
 wat het te gelde maken van je kanaal kan bemoeilijken. Eigen commentaar of eigen
 inbreng helpt.
 
+## Nakijken, autopilot en Discord
+
+- **Nakijken** (menu): alle klare clips die nog niet geüpload zijn, met video, titel, beschrijving,
+  hashtags en tags. Per clip: Inplannen (op het aanbevolen moment of een eigen tijd), Nu uploaden,
+  Opslaan of Overslaan. Of selecteer meerdere en plan ze in één keer in.
+- **Aanbevolen uploadmomenten**: vanaf 10 geposte clips met views op basis van je eigen resultaten
+  (welke uren het best liepen), anders standaardtijden voor je doelgroep (Engels: Amerikaanse
+  middag/avond). Met minimaal x uur ertussen en maximaal y per dag (instelbaar), rekening houdend met
+  wat al ingepland staat.
+- **Autopilot** (op Nakijken): haalt elke 3–48 uur de nieuwste top-clips op van gekozen kanalen
+  (eigen of met toestemming), met een minimum aantal views en een maximum per keer, en maakt er
+  shorts van. Al omgezette clips worden overgeslagen. Uploaden gebeurt niet vanzelf.
+- **Discord-meldingen** (Mijn account): plak een webhook-URL (versleuteld opgeslagen). Je krijgt een
+  bundelbericht als er clips klaarstaan, en meldingen bij compilaties, uploads en de autopilot. Zet
+  `PUBLIC_URL` in je compose voor klikbare links.
+
 ## Tags en het sterkste moment
 
 - **Tags van wat nu werkt**: bij het schrijven van titels en hashtags zoekt Shortcutter de best

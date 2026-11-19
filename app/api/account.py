@@ -27,7 +27,15 @@ def account_page(request: Request, user: User = Depends(A.require_user), db: Ses
         "nav": "account",
         "yt_account": db.scalar(select(YoutubeAccount).where(YoutubeAccount.user_id == user.id)),
         "yt_configured": yt.oauth_credential(db) is not None,
+        "discord_mask": _discord_mask(db, user.id),
     })
+
+
+def _discord_mask(db, user_id: int) -> str | None:
+    from app.integrations import discord
+
+    url = discord.webhook_for(db, user_id)
+    return discord.mask(url) if url else None
 
 
 @router.post("/account/password")

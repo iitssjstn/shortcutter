@@ -181,6 +181,9 @@ class UserSettings(Base):
     insights_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # lessen uit eigen resultaten
     stats_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     hook_teaser: Mapped[bool] = mapped_column(Boolean, default=True)  # nieuwe clips: sterkste moment vooraan
+    discord_webhook_enc: Mapped[bytes | None] = mapped_column(nullable=True)  # versleutelde Discord-webhook-URL
+    uploads_per_day: Mapped[int] = mapped_column(Integer, default=3)  # voor de aanbevolen uploadtijden
+    min_gap_hours: Mapped[int] = mapped_column(Integer, default=3)
 
 
 class Project(Base, JsonMixin):
@@ -277,6 +280,8 @@ class Clip(Base, JsonMixin):
     hook_at: Mapped[float | None] = mapped_column(Float, nullable=True)  # sterkste moment (brontijd, s)
     teaser: Mapped[bool] = mapped_column(Boolean, default=False)  # sterkste moment kort vooraan tonen
     teaser_len: Mapped[float] = mapped_column(Float, default=0.0)  # lengte van de teaser in de render (s)
+    review_state: Mapped[str | None] = mapped_column(String(12), nullable=True)  # None | skipped
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # Discord: 'klaar om na te kijken'
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -445,6 +450,27 @@ class CompilationSchedule(Base, JsonMixin):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC
     last_result: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_compilation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    @property
+    def channel_ids(self) -> list[int]:
+        return [int(x) for x in self._load(self.channel_ids_json, []) if str(x).isdigit()]
+
+
+class AutoPilot(Base, JsonMixin):
+    """Haalt periodiek nieuwe top-clips op van gekozen Twitch-kanalen en maakt er shorts van."""
+
+    __tablename__ = "autopilots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    channel_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    period: Mapped[str] = mapped_column(String(10), default="dag")
+    min_views: Mapped[int] = mapped_column(Integer, default=0)
+    max_per_run: Mapped[int] = mapped_column(Integer, default=5)
+    every_hours: Mapped[int] = mapped_column(Integer, default=12)
+    framing: Mapped[str] = mapped_column(String(16), default="split")
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_result: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     @property
     def channel_ids(self) -> list[int]:

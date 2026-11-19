@@ -602,7 +602,33 @@ def run_next_render(db: Session) -> bool:
             comp.stage_message = "Mislukt"
             db.commit()
         log.exception("Compilatie mislukt")
+    _notify_comp(db, comp.id, render=True)
     return True
+
+
+def _notify_comp(db: Session, cid: int, render: bool) -> None:
+    """Discord-melding na renderen of uploaden van een compilatie (faalt stil)."""
+    from app.integrations import discord
+
+    try:
+        comp = db.get(Compilation, cid)
+        if comp is None:
+            return
+        if render:
+            if comp.status == "done":
+                discord.notify(db, comp.owner_id, f"Compilatie klaar: {comp.title.replace('*', '')[:150]}",
+                               f"{len(comp.included)} clips · {fmt_ts(comp.duration or 0)}", "ok", f"/compilations/{cid}")
+            elif comp.status == "failed":
+                discord.notify(db, comp.owner_id, f"Compilatie mislukt: {comp.title.replace('*', '')[:150]}",
+                               comp.error or "", "error", f"/compilations/{cid}")
+        elif comp.yt_status == "done":
+            discord.notify(db, comp.owner_id, f"Op YouTube: {(comp.yt_title or comp.title)[:150]}",
+                           f"https://www.youtube.com/watch?v={comp.yt_video_id}", "ok")
+        elif comp.yt_status == "failed":
+            discord.notify(db, comp.owner_id, f"Upload mislukt: {(comp.yt_title or comp.title)[:150]}",
+                           comp.yt_error or "", "error", f"/compilations/{cid}")
+    except Exception:  # noqa: BLE001
+        log.warning("Discord-melding voor compilatie %s mislukt", cid)
 
 
 def run_next_upload(db: Session) -> bool:
@@ -619,6 +645,7 @@ def run_next_upload(db: Session) -> bool:
             comp.yt_error = f"Onverwachte fout ({type(exc).__name__})."
             db.commit()
         log.exception("Compilatie-upload mislukt")
+    _notify_comp(db, comp.id, render=False)
     return True
 
 
