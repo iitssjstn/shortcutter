@@ -1,0 +1,19 @@
+<a class="project-item" id="project-{{ p.id }}" href="/projects/{{ p.id }}"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <img class="project-thumb" src="/projects/{{ p.id }}/thumb?v={{ (p.finished_at.timestamp())|int if p.finished_at else 0 }}" alt="" loading="lazy" decoding="async" width="128" height="72">
+  <div style="min-width:0">
+    <div class="project-title">{{ p.title or p.source_url or ('Project ' ~ p.id) }}</div>
+    <div class="project-meta">
+      {{ p.created_at|dt }} · {{ clip_counts.get(p.id, 0) }} clip(s)
+      {% if scope == 'all' %} · {{ p.owner.username }}{% endif %}
+      {% if positions.get(p.id) %} · {{ positions[p.id] }}e in de wachtrij{% endif %}
+    </div>
+    {% if p.status in ACTIVE_STATUSES %}
+    <div class="progress" role="progressbar" aria-valuenow="{{ p.progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ p.progress }}%"></span></div>
+    {% endif %}
+  </div>
+  <div class="right">
+    {% if p.status == 'done' %}<span class="badge badge-ok">Klaar</span>{% if p.warnings %} <span class="badge badge-warn" title="Er zijn waarschuwingen">!</span>{% endif %}
+    {% elif p.status == 'failed' %}<span class="badge badge-error">Fout</span>
+    {% else %}<span class="badge badge-accent">{{ STATUS_LABELS.get(p.status, p.status) }}</span>{% endif %}
+  </div>
+</a>

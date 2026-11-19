@@ -66,13 +66,13 @@
   {% endif %}
 </section>
 
-<section class="card">
+<section class="card" id="geposte">
   <h2>Geposte clips</h2>
   {% if posted %}
   <div class="table-wrap"><table>
     <thead><tr><th>Clip</th><th>Platform</th><th class="num">Score</th><th class="num">Schatting (laag–hoog)</th><th class="num">Echt</th><th class="num">Likes</th><th class="num">Echt / geschat</th><th></th></tr></thead>
     <tbody>
-    {% for c in posted %}
+    {% for c in posted_shown %}
       <tr>
         <td><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.title|truncate(50) }}</a></td>
         <td>{% if c.posted_url %}<a href="{{ c.posted_url }}" target="_blank" rel="noopener noreferrer">{{ c.posted_platform }}</a>{% else %}{{ c.posted_platform }}{% endif %}</td>
@@ -92,6 +92,7 @@
     {% endfor %}
     </tbody>
   </table></div>
+  {% if posted|length > posted_shown|length %}<p style="margin:.6rem 0 0"><a class="btn btn-sm" href="/stats?all=1#geposte">Alle {{ posted|length }} geposte clips tonen</a></p>{% endif %}
   {% else %}
   <p class="muted">Nog geen geposte clips.</p>
   {% endif %}

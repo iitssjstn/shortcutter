@@ -1,0 +1,4 @@
+{% for p in projects %}{% include "partials/project_item.html" %}{% endfor %}
+{% if next_offset %}
+<button type="button" class="btn project-more" hx-get="/partials/projects?scope={{ scope }}&offset={{ next_offset }}" hx-swap="outerHTML" hx-target="this">Meer laden ({{ total - next_offset }} over)</button>
+{% endif %}

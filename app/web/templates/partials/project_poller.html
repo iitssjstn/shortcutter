@@ -1,0 +1,2 @@
+{# Ververst alleen de projecten die nog bezig zijn (out-of-band), niet de hele lijst. #}
+<div id="project-poller"{% if oob %} hx-swap-oob="true"{% endif %}{% if active_ids %} hx-get="/partials/projects/active?ids={{ active_ids|join(',') }}" hx-trigger="every 3s" hx-swap="none"{% endif %} hidden></div>
