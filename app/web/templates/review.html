@@ -24,7 +24,7 @@
       <video class="rv-video" src="/clips/{{ c.id }}/video" controls preload="none" {% if c.thumb_path %}poster="/clips/{{ c.id }}/thumb"{% endif %} playsinline></video>
       <form method="post" action="/review/{{ c.id }}" class="rv-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <div class="rv-meta muted"><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.project.title|truncate(60) }}</a> · {{ '%.0f'|format(c.duration) }} s{% if c.teaser %} · teaser vooraan{% endif %}{% if c.yt_status == 'failed' %} · <span style="color:var(--err)">upload mislukt: {{ c.yt_error|truncate(80) }}</span>{% endif %}</div>
+        <div class="rv-meta muted"><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.project.title|truncate(60) }}</a> · {{ '%.0f'|format(c.duration) }} s{% if c.teaser %} · teaser vooraan{% endif %}{% set sf = c.safety %}{% if sf %} · familievriendelijk ({{ sf.muted or 0 }} gepiept{% if sf.checked %}, {{ sf.blurred|length }} vervaagd{% endif %}){% if sf.warning %} · <span style="color:var(--err)">{{ sf.warning }}</span>{% endif %}{% endif %}{% if c.yt_status == 'failed' %} · <span style="color:var(--err)">upload mislukt: {{ c.yt_error|truncate(80) }}</span>{% endif %}</div>
         <div class="field"><label for="rt-{{ c.id }}">Titel</label><input id="rt-{{ c.id }}" type="text" name="title" value="{{ c.title }}" maxlength="100" required></div>
         <div class="field"><label for="rd-{{ c.id }}">Beschrijving</label><textarea id="rd-{{ c.id }}" name="description" rows="2">{{ c.description }}</textarea></div>
         <div class="form-2">

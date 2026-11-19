@@ -14,6 +14,7 @@ from app.core.paths import find_source, project_input, project_output
 from app.core.store import effective_whisper_model
 from app.estimation.features import compute_features
 from app.estimation.estimator import viral_score
+from app.pipeline import safety
 from app.pipeline import captions, framing, media, render
 from app.pipeline.download import download
 from app.pipeline.errors import PipelineError, RenderError, SourceMissing
@@ -132,8 +133,13 @@ def _trend_kw(db: Session, project: Project) -> dict:
         return {}
     from app.pipeline.posttext import project_trends
 
+    from app.core.store import user_settings
+
     text = project_trends(db, project)
-    return {"trends": text} if text else {}
+    kw = {"trends": text} if text else {}
+    if user_settings(db, project.owner_id).safe_mode:
+        kw["family"] = True
+    return kw
 
 
 def _auto_post_text(db: Session, project: Project) -> None:
@@ -147,6 +153,47 @@ def _auto_post_text(db: Session, project: Project) -> None:
     if err:
         project.add_warning(f"{err} Gebruik 'Posttekst voor alle clips' om het opnieuw te proberen.")
         db.commit()
+
+
+def _censor_groups(groups):
+    """Eigen ondertitelregels uit de editor: scheldwoorden maskeren."""
+    if not groups:
+        return groups
+    out = []
+    for g in groups:
+        g = dict(g)
+        g["text"] = " ".join(safety.mask(t) if safety.is_profane(t) else t for t in str(g.get("text", "")).split())
+        if g.get("words"):
+            g["words"] = safety.censor_words(g["words"])
+        out.append(g)
+    return out
+
+
+def apply_safety(db: Session, clip: Clip, raw: Path, words: list[dict], window, us) -> dict:
+    """Familievriendelijk: piep scheldwoorden en vervaag ongeschikte beelden in `raw`. Geeft een samenvatting."""
+    from app.core.store import get_global
+
+    info = media.probe(raw)
+    dur = info["duration"]
+    mute = safety.mute_intervals(words, clip.start, clip.end, window)
+    blur, notes = [], {"muted": len(mute), "blurred": [], "reasons": [], "checked": False}
+    cfg = load_llm_config(db, "copy") if us.safe_visual and get_global(db, "llm_vision") != "0" else None
+    if cfg is not None:
+        try:
+            flags = safety.check_frames(cfg, raw, dur)
+            blur = safety.blur_intervals(flags, dur)
+            notes.update(checked=True, reasons=sorted({safety.FLAG_REASONS[r] for _, r in flags}))
+        except Exception as exc:  # noqa: BLE001 - beeldcontrole is een extra
+            notes["error"] = f"Beeldcontrole mislukt ({type(exc).__name__})."
+    if mute or blur:
+        tmp = raw.with_name(raw.stem + "_safe.mp4")
+        safety.censor(raw, tmp, mute, blur, info["has_audio"])
+        tmp.replace(raw)
+    notes["blurred"] = [[a, b] for a, b in blur]
+    share = sum(b - a for a, b in blur) / dur if dur else 0
+    if share > 0.4:
+        notes["warning"] = "Een groot deel van deze clip is vervaagd: waarschijnlijk niet geschikt voor alle leeftijden."
+    return notes
 
 
 TEASER_MIN_CLIP = 8.0  # kortere clips krijgen geen teaser
@@ -214,8 +261,14 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
         clip.framing_mode = fr.mode
         window = teaser_window(clip, source, info)
         clip.teaser_len = round(window[1] - window[0], 3) if window else 0.0
-        captions.write_ass(ass, words, clip.start, clip.end, project.caption_style,
-                           clip.caption_opts or None, clip.custom_captions, offset=clip.teaser_len)
+        from app.core.store import user_settings as _us
+
+        owner_settings = _us(db, project.owner_id)
+        safe = bool(owner_settings.safe_mode)
+        captions.write_ass(ass, safety.censor_words(words) if safe else words, clip.start, clip.end,
+                           project.caption_style, clip.caption_opts or None,
+                           _censor_groups(clip.custom_captions) if safe else clip.custom_captions,
+                           offset=clip.teaser_len)
         clip.ass_path = ass.name
         for p in (final,):
             if p.exists():
@@ -226,6 +279,7 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
             tmp = out_dir / f"{base}_teaser.mp4"
             render.add_teaser(raw, window[0], window[1], tmp, has_audio=media.probe(raw)["has_audio"])
             tmp.replace(raw)
+        clip.safety_json = json.dumps(apply_safety(db, clip, raw, words, window, owner_settings)) if safe else None
         clip.raw_path = raw.name
         media.thumbnail(raw, thumb, at=min(1.0, clip.duration / 2))
         clip.thumb_path = thumb.name if thumb.exists() else None

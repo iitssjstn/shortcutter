@@ -335,8 +335,12 @@ SYSTEM_PROMPT = (
 )
 
 
+FAMILY = ("FAMILIEVRIENDELIJK KANAAL: geef de voorkeur aan fragmenten zonder grof taalgebruik of seksuele/heftige "
+          "inhoud, en houd titels, beschrijvingen en hashtags geschikt voor alle leeftijden.")
+
+
 def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: str = "en",
-                 insights: str = "", trends: str = "") -> str:
+                 insights: str = "", trends: str = "", family: bool = False) -> str:
     from app.pipeline.copywriting import copy_rules
 
     experience = (
@@ -357,7 +361,8 @@ def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: s
         '"begrijpelijkheid_zonder_context": 1-10, "afronding": 1-10}]}\n'
         "Laat elk fragment beginnen op een moment dat meteen pakt (geen aanloop, groet of stilte). "
         "'piek' is de tijd (in seconden, zoals in het transcript) van het sterkste moment: de clou, reactie of "
-        "climax. Wees streng met de scores. " + copy_rules(language) + "\n\n"
+        "climax. Wees streng met de scores. " + copy_rules(language) + "\n"
+        + (FAMILY + "\n" if family else "") + "\n"
         f"TRANSCRIPT:\n{chunk}"
     )
 
@@ -391,6 +396,7 @@ def llm_pick(
     meta: dict | None = None,
     insights: str = "",
     trends: str = "",
+    family: bool = False,
 ) -> list[dict]:
     from app.pipeline.copywriting import clean_description, clean_title, normalize_hashtags, normalize_tags
 
@@ -407,7 +413,7 @@ def llm_pick(
             cfg,
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language, insights, trends)},
+                {"role": "user", "content": _user_prompt(chunk, per_chunk, min_dur, max_dur, post_language, insights, trends, family)},
             ],
             client=client,
             sleep=sleep,

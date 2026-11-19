@@ -80,11 +80,19 @@ def download_subtitles(cid: int, fmt: str, user: User = Depends(require_user), d
             return FileResponse(path, media_type="text/plain", headers=attachment(clip_filename(clip, ext="ass")))
         raise HTTPException(404, "Er is geen transcript voor deze clip.")
     words = all_words(transcript)
+    groups = clip.custom_captions
+    from app.core.store import user_settings
+
+    if user_settings(db, clip.owner_id).safe_mode:  # familievriendelijk: ook in de downloads gemaskeerd
+        from app.pipeline import safety
+        from app.pipeline.run import _censor_groups
+
+        words, groups = safety.censor_words(words), _censor_groups(groups)
     if fmt == "srt":
-        body = captions.build_srt(words, clip.start, clip.end, clip.custom_captions, offset=clip.teaser_len or 0.0)
+        body = captions.build_srt(words, clip.start, clip.end, groups, offset=clip.teaser_len or 0.0)
     else:
         body = captions.build_ass(words, clip.start, clip.end, clip.project.caption_style,
-                                  clip.caption_opts or None, clip.custom_captions, offset=clip.teaser_len or 0.0)
+                                  clip.caption_opts or None, groups, offset=clip.teaser_len or 0.0)
     return Response(body, media_type="text/plain; charset=utf-8", headers=attachment(clip_filename(clip, ext=fmt)))
 
 

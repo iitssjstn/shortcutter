@@ -184,6 +184,8 @@ class UserSettings(Base):
     discord_webhook_enc: Mapped[bytes | None] = mapped_column(nullable=True)  # versleutelde Discord-webhook-URL
     uploads_per_day: Mapped[int] = mapped_column(Integer, default=3)  # voor de aanbevolen uploadtijden
     min_gap_hours: Mapped[int] = mapped_column(Integer, default=3)
+    safe_mode: Mapped[bool] = mapped_column(Boolean, default=False)  # familievriendelijk: piepen + vervagen
+    safe_visual: Mapped[bool] = mapped_column(Boolean, default=True)  # beelden laten controleren door AI
 
 
 class Project(Base, JsonMixin):
@@ -282,6 +284,7 @@ class Clip(Base, JsonMixin):
     teaser_len: Mapped[float] = mapped_column(Float, default=0.0)  # lengte van de teaser in de render (s)
     review_state: Mapped[str | None] = mapped_column(String(12), nullable=True)  # None | skipped
     notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # Discord: 'klaar om na te kijken'
+    safety_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # wat de familievriendelijke modus deed
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -323,6 +326,10 @@ class Clip(Base, JsonMixin):
     @property
     def auto_layout(self) -> dict | None:
         return self._load(self.auto_layout_json, None)
+
+    @property
+    def safety(self) -> dict:
+        return self._load(self.safety_json, {})
 
     @property
     def custom_captions(self) -> list | None:

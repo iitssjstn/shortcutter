@@ -60,6 +60,9 @@
             </div>
           </details>
 
+          {% set sf = c.safety %}{% if sf %}
+          <p class="safe-note">Familievriendelijk: {{ sf.muted or 0 }} woord(en) weggepiept{% if sf.checked %}, {{ sf.blurred|length }} moment(en) vervaagd{% if sf.reasons %} ({{ sf.reasons|join(', ') }}){% endif %}{% elif sf.error %}, {{ sf.error }}{% else %}, beelden niet gecontroleerd{% endif %}.{% if sf.warning %} <strong>{{ sf.warning }}</strong>{% endif %}</p>
+          {% endif %}
           <details class="sub">
             <summary>Tekst, tijden en beeldvulling</summary>
             <div class="details-body stack">

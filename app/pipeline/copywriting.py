@@ -41,6 +41,11 @@ def copy_rules(lang: str = "en") -> str:
 COPY_RULES = copy_rules("en")
 
 
+FAMILY_RULE = ("FAMILIEVRIENDELIJK: titel, beschrijving, hashtags en tags moeten geschikt zijn voor alle leeftijden: "
+               "geen scheldwoorden, geen seksuele of drugsverwijzingen en geen grof geweld in de tekst. Spannend en "
+               "grappig mag; beschrijf heftige game-momenten neutraal (bijv. 'chaos', 'crash', 'escape').")
+
+
 def normalize_tags(raw) -> str:
     from app.estimation.trends import normalize_tags as _n
 
@@ -83,6 +88,7 @@ def generate_post_texts(
     meta: dict | None = None,
     insights: str = "",
     trends: str = "",
+    family: bool = False,
 ) -> dict[int, dict]:
     """items: [{'id', 'text', 'title', optioneel 'before', 'context', 'frames', 'title_unreliable', 'duration'}].
 
@@ -103,6 +109,8 @@ def generate_post_texts(
              '"tags": ["tag 1", "tag 2"]}]}')
     if trends:
         intro = trends + "\n\n" + intro
+    if family:
+        intro += "\n" + FAMILY_RULE
     if insights:
         intro = ("ERVARING VAN DIT KANAAL (echte resultaten; schrijf titels en beschrijvingen in de stijl van wat "
                  "goed werkte en vermijd wat slecht werkte):\n" + insights + "\n\n" + intro)
