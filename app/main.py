@@ -132,9 +132,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def favicon():
         return RedirectResponse("/static/favicon.svg")
 
-    from app.api import account, auth, clips, compilations, downloads, keys, projects, settings as settings_api, stats, twitch, users, youtube
+    from app.api import account, auth, clips, compilations, downloads, keys, projects, review, settings as settings_api, stats, twitch, users, youtube
 
-    for mod in (auth, projects, clips, downloads, stats, settings_api, keys, users, account, twitch, compilations, youtube):
+    for mod in (auth, projects, clips, downloads, stats, settings_api, keys, users, account, twitch, compilations, review, youtube):
         app.include_router(mod.router)
     return app
 

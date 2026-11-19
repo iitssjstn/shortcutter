@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Nakijken{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Nakijken <span class="badge">{{ total }}</span></h1>
+    <p class="muted">Alle klare clips die nog niet geüpload zijn. Controleer ze, pas de tekst aan en plan ze in op het aanbevolen moment, of upload meteen.</p>
+  </div>
+</div>
+
+<div class="rv-layout">
+  <section>
+    {% if not yt_account %}<div class="flash flash-warn">Koppel eerst je YouTube-kanaal bij <a href="/account#youtube">Mijn account</a> om te kunnen uploaden of inplannen.</div>{% endif %}
+    {% if items %}
+    <form method="post" action="/review-bulk" id="bulk-form" class="card rv-bulk">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="row" style="margin:0;font-weight:500"><input type="checkbox" id="rv-all"> Alles selecteren</label>
+      <button class="btn btn-primary" type="submit" {% if not yt_account %}disabled{% endif %}>Geselecteerde inplannen op de aanbevolen momenten</button>
+    </form>
+    {% endif %}
+    {% for it in items %}{% set c = it.clip %}
+    <article class="card rv-item" id="r-{{ c.id }}">
+      <label class="rv-check" title="Selecteren"><input type="checkbox" name="clip_ids" value="{{ c.id }}" form="bulk-form" class="rv-sel"></label>
+      <video class="rv-video" src="/clips/{{ c.id }}/video" controls preload="none" {% if c.thumb_path %}poster="/clips/{{ c.id }}/thumb"{% endif %} playsinline></video>
+      <form method="post" action="/review/{{ c.id }}" class="rv-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="rv-meta muted"><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.project.title|truncate(60) }}</a> · {{ '%.0f'|format(c.duration) }} s{% if c.teaser %} · teaser vooraan{% endif %}{% if c.yt_status == 'failed' %} · <span style="color:var(--err)">upload mislukt: {{ c.yt_error|truncate(80) }}</span>{% endif %}</div>
+        <div class="field"><label for="rt-{{ c.id }}">Titel</label><input id="rt-{{ c.id }}" type="text" name="title" value="{{ c.title }}" maxlength="100" required></div>
+        <div class="field"><label for="rd-{{ c.id }}">Beschrijving</label><textarea id="rd-{{ c.id }}" name="description" rows="2">{{ c.description }}</textarea></div>
+        <div class="form-2">
+          <div class="field"><label for="rh-{{ c.id }}">Hashtags</label><input id="rh-{{ c.id }}" type="text" name="hashtags" value="{{ c.hashtags }}"></div>
+          <div class="field"><label for="ry-{{ c.id }}">Tags (verborgen)</label><input id="ry-{{ c.id }}" type="text" name="yt_tags" value="{{ c.yt_tags or '' }}"></div>
+        </div>
+        <div class="rv-when">
+          <div class="field"><label for="rw-{{ c.id }}">Publiceren op {% if it.slot %}<span class="badge badge-ok">aanbevolen</span>{% endif %}</label>
+            <input id="rw-{{ c.id }}" type="datetime-local" name="publish_at" value="{{ it.slot.strftime('%Y-%m-%dT%H:%M') if it.slot else '' }}"></div>
+          <div class="field"><label for="rp-{{ c.id }}">Bij 'nu uploaden'</label>
+            <select id="rp-{{ c.id }}" name="privacy">{% for k, v in privacy.items() %}<option value="{{ k }}" {% if k == 'public' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="rv-actions">
+          <button class="btn btn-primary" type="submit" name="action" value="schedule" {% if not yt_account %}disabled{% endif %}>Inplannen</button>
+          <button class="btn" type="submit" name="action" value="now" {% if not yt_account %}disabled{% endif %}>Nu uploaden</button>
+          <button class="btn" type="submit" name="action" value="save">Opslaan</button>
+          <button class="btn btn-danger" type="submit" name="action" value="skip" formnovalidate>Overslaan</button>
+        </div>
+      </form>
+    </article>
+    {% else %}
+    <div class="card empty">Niets om na te kijken. Nieuwe clips verschijnen hier zodra ze klaar zijn{% if ap.enabled %} (de autopilot haalt ze automatisch op){% endif %}.</div>
+    {% endfor %}
+    {% if total > items|length %}<p class="hint">De eerste {{ items|length }} van {{ total }} worden getoond; plan of sla er een paar af om de volgende te zien.</p>{% endif %}
+  </section>
+
+  <aside>
+    <section class="card" id="momenten">
+      <h2>Uploadmomenten</h2>
+      <p class="hint" style="margin-top:0">{{ why }}</p>
+      <form method="post" action="/review-settings" class="form-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field"><label for="upd">Per dag max.</label><input id="upd" type="number" name="uploads_per_day" min="1" max="10" value="{{ us.uploads_per_day }}"></div>
+        <div class="field"><label for="gap">Minimaal uren ertussen</label><input id="gap" type="number" name="min_gap_hours" min="1" max="24" value="{{ us.min_gap_hours }}"></div>
+        <button class="btn btn-sm" type="submit" style="grid-column:1/-1">Opslaan</button>
+      </form>
+      <p class="hint">YouTube staat via de API ongeveer 6 uploads per dag toe.</p>
+    </section>
+
+    <section class="card" id="autopilot">
+      <h2>Autopilot</h2>
+      <p class="hint" style="margin-top:0">Haalt automatisch de nieuwste top-clips op van je kanalen en maakt er shorts van. Ze komen hier te staan; uploaden doe je zelf.</p>
+      {% if not has_twitch %}<p class="muted">Er is nog geen Twitch API-sleutel ingesteld.</p>{% endif %}
+      {% if channels %}
+      <form method="post" action="/autopilot">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="row" style="font-weight:600;margin-bottom:.6rem"><input type="checkbox" name="enabled" value="1" {% if ap.enabled %}checked{% endif %}> Aan</label>
+        <div class="field"><label>Kanalen</label>
+          <div class="comp-channels">
+            {% for ch in channels %}
+            <label class="comp-chan"><input type="checkbox" name="channel_ids" value="{{ ch.id }}" {% if ch.id in ap.channel_ids %}checked{% endif %}>
+              {% if ch.profile_image_url %}<img src="{{ ch.profile_image_url }}" alt="" loading="lazy">{% else %}<span class="channel-ph"></span>{% endif %}
+              <span>{{ ch.display_name }}</span></label>
+            {% endfor %}
+          </div></div>
+        <div class="form-2">
+          <div class="field"><label for="ap-every">Elke</label>
+            <select id="ap-every" name="every_hours">{% for h in every_choices %}<option value="{{ h }}" {% if h == ap.every_hours %}selected{% endif %}>{{ h }} uur</option>{% endfor %}</select></div>
+          <div class="field"><label for="ap-period">Clips uit</label>
+            <select id="ap-period" name="period">{% for k, v in periods.items() %}<option value="{{ k }}" {% if k == ap.period %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="ap-max">Max. per keer</label><input id="ap-max" type="number" name="max_per_run" min="1" max="20" value="{{ ap.max_per_run }}"></div>
+          <div class="field"><label for="ap-views">Min. views</label><input id="ap-views" type="number" name="min_views" min="0" value="{{ ap.min_views }}"></div>
+        </div>
+        <div class="field"><label for="ap-framing">Beeldvulling</label>
+          <select id="ap-framing" name="framing">{% for k, v in framing_modes.items() %}<option value="{{ k }}" {% if k == ap.framing %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        {% if ap.last_result %}<p class="hint">Laatste keer{% if ap.last_run_at %} ({{ ap.last_run_at|dt }}){% endif %}: {{ ap.last_result }}</p>{% endif %}
+        <div class="comp-save">
+          <button class="btn btn-primary" type="submit">Opslaan</button>
+          <button class="btn" type="submit" name="run_now" value="1" {% if not has_twitch %}disabled{% endif %}>Nu ophalen</button>
+        </div>
+        <p class="hint">Al omgezette clips worden overgeslagen. Meldingen via Discord stel je in bij <a href="/account#discord">Mijn account</a>.</p>
+      </form>
+      {% else %}
+      <p class="muted">Voeg eerst een kanaal toe op de <a href="/twitch">Twitch-pagina</a>.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

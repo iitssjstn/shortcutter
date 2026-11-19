@@ -44,6 +44,26 @@ def sync_all_stats() -> None:
 UPLOAD_KINDS = ("upload",)
 
 
+def _notify_upload(db, clip_id: int) -> None:
+    """Discord-melding na een clip-upload (faalt stil)."""
+    from app.core.models import Clip
+    from app.integrations import discord
+
+    try:
+        clip = db.get(Clip, clip_id)
+        if clip is None:
+            return
+        if clip.yt_status == "done":
+            note = f"\n{clip.yt_error}" if clip.yt_error else ""
+            discord.notify(db, clip.owner_id, f"Op YouTube: {clip.title[:150]}",
+                           (clip.posted_url or "") + note, "ok")
+        elif clip.yt_status == "failed":
+            discord.notify(db, clip.owner_id, f"Upload mislukt: {clip.title[:150]}", clip.yt_error or "", "error",
+                           f"/projects/{clip.project_id}#clip-{clip.id}")
+    except Exception:  # noqa: BLE001
+        log.warning("Discord-melding voor clip %s mislukt", clip_id)
+
+
 def run_job_once(kinds: tuple[str, ...] | None = None, exclude: tuple[str, ...] | None = None) -> bool:
     """Verwerk de volgende job. Geeft False als de wachtrij leeg is."""
     db = new_session()
@@ -66,6 +86,7 @@ def run_job_once(kinds: tuple[str, ...] | None = None, exclude: tuple[str, ...] 
 
                 if not run_upload(db, job.clip_id):
                     error = "upload"
+                _notify_upload(db, job.clip_id)
         except Exception as exc:  # vangnet: de worker mag nooit stoppen
             db.rollback()
             log.exception("Job %s faalde", job.id)
@@ -89,11 +110,20 @@ def run_compilation_once(upload: bool = False) -> bool:
 
 
 def run_schedules() -> int:
-    from app.pipeline import weekly
+    """Wekelijkse compilaties, autopilot en het Discord-bundelbericht voor clips die klaarstaan."""
+    from app.integrations import discord
+    from app.pipeline import autopilot, weekly
 
     db = new_session()
+    n = 0
     try:
-        return weekly.run_due(db)
+        for fn in (weekly.run_due, autopilot.run_due, discord.digest_ready_clips):
+            try:
+                n += fn(db) or 0
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                log.exception("Planning %s mislukt", getattr(fn, "__qualname__", fn))
+        return n
     finally:
         db.close()
 

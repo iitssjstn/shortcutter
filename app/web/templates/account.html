@@ -22,6 +22,22 @@
         <button class="btn" type="submit">Opslaan</button>
       </form>
     </section>
+    <section class="card" id="discord">
+      <h2>Discord-meldingen</h2>
+      <p class="muted" style="font-size:.9rem">Krijg een bericht in je Discord-kanaal als er clips klaarstaan om na te kijken, een compilatie klaar is, een upload gelukt of mislukt is, of de autopilot nieuwe clips heeft opgehaald.
+        Maak in Discord een webhook aan: <em>Kanaal bewerken → Integraties → Webhooks → Nieuwe webhook → Webhook-URL kopiëren</em>.</p>
+      {% if discord_mask %}<p>Gekoppeld: <code>{{ discord_mask }}</code></p>{% endif %}
+      <form method="post" action="/account/discord">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field"><label for="dc-hook">Webhook-URL</label><input id="dc-hook" name="webhook" type="password" autocomplete="off" placeholder="https://discord.com/api/webhooks/…"></div>
+        <div class="action-grid">
+          <button class="btn btn-primary" type="submit">{{ 'Vervangen en testen' if discord_mask else 'Koppelen en testen' }}</button>
+          {% if discord_mask %}<button class="btn btn-danger" type="submit" name="remove" value="1" formnovalidate>Uitzetten</button>{% endif %}
+        </div>
+        <p class="hint">De URL wordt versleuteld opgeslagen en daarna nooit meer getoond.</p>
+      </form>
+    </section>
+
     <section class="card" id="youtube">
       <h2>YouTube-kanaal</h2>
       {% if yt_account %}

@@ -22,6 +22,36 @@ router = APIRouter()
 MAX_IMPORT = 20
 
 
+def create_twitch_project(db: Session, owner_id: int, clip: dict, ch: TwitchChannel, framing: str,
+                          caption_style: str) -> Project:
+    """Project van één Twitch-clip (van een toegestaan kanaal) aanmaken en in de wachtrij zetten."""
+    project = Project(
+        owner_id=owner_id,
+        source_type="twitch",
+        source_url=clip["url"],
+        title=clip["title"][:300],
+        credit=f"twitch.tv/{ch.login}",
+        num_clips=1,
+        min_dur=3,
+        max_dur=max(60, int(clip["duration"]) + 1),
+        caption_style=caption_style,
+        framing=framing,
+        status="queued",
+        source_meta_json=json.dumps({
+            "platform": "twitch",
+            "original_title": clip["title"],
+            "title_unreliable": True,  # Twitch-cliptitels worden door kijkers bedacht
+            "streamer": clip.get("broadcaster_name") or ch.display_name,
+            "game": twitch.get_game_name(db, clip.get("game_id", "")),
+            "clip_creator": clip.get("creator"),
+        }, ensure_ascii=False),
+    )
+    db.add(project)
+    db.commit()
+    queue.enqueue(db, project)
+    return project
+
+
 def _channel(db: Session, user: User, cid: int) -> TwitchChannel:
     ch = db.get(TwitchChannel, cid)
     if ch is None or ch.owner_id != user.id:  # kanalen zijn persoonlijk, ook voor admins
@@ -182,30 +212,7 @@ async def import_clips(
         if limit > 0 and active >= limit:
             skipped.append("maximum actieve projecten bereikt")
             break
-        project = Project(
-            owner_id=user.id,
-            source_type="twitch",
-            source_url=clip["url"],
-            title=clip["title"][:300],
-            credit=f"twitch.tv/{ch.login}",
-            num_clips=1,
-            min_dur=3,
-            max_dur=max(60, int(clip["duration"]) + 1),
-            caption_style=us.caption_style,
-            framing=framing,
-            status="queued",
-            source_meta_json=json.dumps({
-                "platform": "twitch",
-                "original_title": clip["title"],
-                "title_unreliable": True,  # Twitch-cliptitels worden door kijkers bedacht
-                "streamer": clip.get("broadcaster_name") or ch.display_name,
-                "game": twitch.get_game_name(db, clip.get("game_id", "")),
-                "clip_creator": clip.get("creator"),
-            }, ensure_ascii=False),
-        )
-        db.add(project)
-        db.commit()
-        queue.enqueue(db, project)
+        project = create_twitch_project(db, user.id, clip, ch, framing, us.caption_style)
         active += 1
         made.append(project.id)
     if not made:

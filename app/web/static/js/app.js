@@ -462,3 +462,10 @@
     open(b.getAttribute("data-twitch-clip"), b.getAttribute("data-title"));
   });
 })();
+
+// ---------- nakijken: alles selecteren ----------
+document.addEventListener("change", function (e) {
+  if (e.target && e.target.id === "rv-all") {
+    document.querySelectorAll(".rv-sel").forEach(function (cb) { cb.checked = e.target.checked; });
+  }
+});
