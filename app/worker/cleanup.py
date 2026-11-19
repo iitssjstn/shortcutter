@@ -40,6 +40,19 @@ def run_cleanup(db: Session) -> dict:
                 p.source_deleted = True
                 stats["sources_removed"] += 1
 
+    # compilaties: zelfde bewaartermijn als projecten; gedownloade clips weg na de bronbewaartermijn
+    from app.core.models import Compilation
+    from app.pipeline import compile as cp
+
+    for c in db.scalars(select(Compilation).where(Compilation.status.not_in(("queued", "rendering")))).all():
+        age = now - (c.finished_at or c.updated_at or c.created_at)
+        if proj_days > 0 and age > timedelta(days=proj_days):
+            shutil.rmtree(cp.comp_dir(c.id), ignore_errors=True)
+            db.delete(c)
+            continue
+        if src_days > 0 and age > timedelta(days=src_days) and c.status == "done":
+            shutil.rmtree(cp.comp_dir(c.id) / "clips", ignore_errors=True)
+
     days = get_settings().session_days
     db.execute(delete(UserSession).where(UserSession.last_seen_at < now - timedelta(days=days)))
     db.execute(delete(Invite).where(Invite.expires_at < now - timedelta(days=7)))

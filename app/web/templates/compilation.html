@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ comp.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="muted" style="margin:0"><a href="/compilations">← Compilaties</a></p>
+    <h1>{{ comp.title }}</h1>
+    <p class="muted">{{ comp.included|length }} van {{ comp.items|length }} clips gekozen · ±{{ fmt_ts(total) }} · liggend 1920×1080</p>
+  </div>
+</div>
+
+{% if busy or comp.yt_status in ('queued', 'uploading') %}
+<div class="card" hx-get="/compilations/{{ comp.id }}/status" hx-trigger="every 3s" hx-swap="none">
+  {% if busy %}
+  <strong>Renderen: {{ comp.progress }}%</strong> <span class="muted">{{ comp.stage_message }}</span>
+  <div class="progress" style="margin-top:.5rem"><span style="width:{{ comp.progress }}%"></span></div>
+  {% else %}<strong>Uploaden naar YouTube…</strong>{% endif %}
+  <p class="hint">Deze pagina ververst vanzelf. Je kunt ondertussen gewoon verder werken.</p>
+</div>
+{% elif comp.status == 'failed' %}
+<div class="flash flash-error">Renderen mislukt: {{ comp.error }}</div>
+{% endif %}
+
+{% if has_video and not busy %}
+<section class="card comp-result">
+  <video src="/compilations/{{ comp.id }}/video" controls preload="metadata" {% if comp.thumb_path %}poster="/compilations/{{ comp.id }}/thumb"{% endif %}></video>
+  <div>
+    <div class="action-grid">
+      <a class="btn btn-primary" href="/compilations/{{ comp.id }}/video?download=1">⬇ Download mp4</a>
+    </div>
+    {% if comp.chapters %}
+    <h3 style="margin:1rem 0 .4rem">Hoofdstukken</h3>
+    <ol class="comp-chapters">{% for c in comp.chapters %}<li><span class="mono">{{ fmt_ts(c.t) }}</span> {{ c.label }}</li>{% endfor %}</ol>
+    {% else %}
+    <p class="hint">Geen hoofdstukken: YouTube vraagt er minstens 3 van elk minstens 10 seconden.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card" id="youtube">
+  <h2>Naar YouTube</h2>
+  {% if comp.yt_status == 'done' %}
+  <div class="flash flash-ok" style="margin:0 0 .8rem">Geüpload: <a href="https://www.youtube.com/watch?v={{ comp.yt_video_id }}" target="_blank" rel="noopener">youtube.com/watch?v={{ comp.yt_video_id }}</a></div>
+  {% endif %}
+  {% if comp.yt_error %}<div class="flash {{ 'flash-error' if comp.yt_status == 'failed' else 'flash-warn' }}" style="margin:0 0 .8rem">{{ comp.yt_error }}</div>{% endif %}
+  <form method="post" action="/compilations/{{ comp.id }}/youtube">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label for="yt-title">Titel</label><input id="yt-title" type="text" name="title" maxlength="100" value="{{ comp.yt_title or comp.title }}" required></div>
+    <div class="field"><label for="yt-desc">Beschrijving</label><textarea id="yt-desc" name="description" rows="12">{{ comp.description or '' }}</textarea>
+      <p class="hint">Met hoofdstukken (tijden) en credits per streamer. Pas gerust aan.</p></div>
+    <div class="field"><label for="yt-tags">Hashtags</label><input id="yt-tags" type="text" name="hashtags" value="{{ comp.hashtags or '' }}"></div>
+    {% if yt_account %}
+    <div class="form-3">
+      <div class="field"><label for="yt-priv">Zichtbaarheid</label>
+        <select id="yt-priv" name="privacy">{% for k, v in privacy.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="yt-when">Publiceren op <span class="muted" style="font-weight:400">(optioneel)</span></label><input id="yt-when" name="publish_at" type="datetime-local"></div>
+      <div class="field"><label>&nbsp;</label><label class="row" style="font-weight:500"><input type="checkbox" name="made_for_kids" value="1"> Gemaakt voor kinderen</label></div>
+    </div>
+    {% endif %}
+    <div class="action-grid">
+      <button class="btn" type="submit" formaction="/compilations/{{ comp.id }}/text">Tekst opslaan</button>
+      {% if yt_account %}
+      <button class="btn btn-primary" type="submit" {% if comp.yt_status in ('queued', 'uploading') %}disabled{% endif %}>Uploaden naar YouTube</button>
+      {% endif %}
+    </div>
+    {% if not yt_account %}<p class="hint">Koppel je YouTube-kanaal bij <a href="/account">Mijn account</a> om direct te uploaden.</p>{% endif %}
+  </form>
+</section>
+{% endif %}
+
+<form method="post" action="/compilations/{{ comp.id }}" class="card" id="clips">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Instellingen en clips</h2>
+  <div class="form-3">
+    <div class="field" style="grid-column: span 2"><label for="c-title">Titel in de intro</label><input id="c-title" type="text" name="title" maxlength="200" value="{{ comp.title }}"></div>
+    <div class="field"><label for="c-rank">Nummering</label>
+      <select id="c-rank" name="ranking">{% for k, v in rankings.items() %}<option value="{{ k }}" {% if k == comp.ranking %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="row" style="gap:1.2rem;margin-bottom:.8rem">
+    <label class="row" style="font-weight:500"><input type="checkbox" name="intro" value="1" {% if comp.intro %}checked{% endif %}> Introscherm (3 s)</label>
+    <label class="row" style="font-weight:500"><input type="checkbox" name="outro" value="1" {% if comp.outro %}checked{% endif %}> Eindscherm met credits (4 s)</label>
+  </div>
+  <p class="hint" style="margin-bottom:.6rem">Afspeelvolgorde van boven naar beneden. Begin/eind in seconden binnen de clip (leeg = tot het einde).</p>
+
+  <ol class="comp-items">
+    {% for it in comp.items %}
+    <li class="comp-item {{ '' if it.included else 'off' }}" id="item-{{ it.id }}">
+      <label class="comp-inc" title="Meenemen"><input type="checkbox" name="inc_{{ it.id }}" value="1" {% if it.included %}checked{% endif %}></label>
+      <span class="comp-ithumb">{% if it.thumbnail_url %}<img src="{{ it.thumbnail_url }}" alt="" loading="lazy">{% endif %}
+        {% if ranks.get(it.id) %}<span class="comp-rank">#{{ ranks[it.id] }}</span>{% endif %}</span>
+      <span class="comp-imain">
+        <input type="text" name="title_{{ it.id }}" value="{{ it.title }}" maxlength="200" aria-label="Titel in beeld">
+        <span class="muted">{{ it.streamer }} · {{ '{:,}'.format(it.views).replace(',', '.') }} views · {{ '%.0f'|format(it.duration) }} s{% if it.game %} · {{ it.game }}{% endif %} · <a href="{{ it.clip_url }}" target="_blank" rel="noopener">bekijk</a></span>
+      </span>
+      <span class="comp-trim">
+        <label>Begin<input type="text" name="start_{{ it.id }}" inputmode="decimal" value="{{ '%g'|format(it.trim_start) }}"></label>
+        <label>Eind<input type="text" name="end_{{ it.id }}" inputmode="decimal" value="{{ '%g'|format(it.trim_end) if it.trim_end is not none else '' }}" placeholder="{{ '%.0f'|format(it.duration) }}"></label>
+      </span>
+      <span class="comp-move">
+        <button class="btn btn-sm" name="move" value="{{ it.id }}:up" title="Omhoog" {% if loop.first %}disabled{% endif %}>↑</button>
+        <button class="btn btn-sm" name="move" value="{{ it.id }}:down" title="Omlaag" {% if loop.last %}disabled{% endif %}>↓</button>
+        <button class="btn btn-sm btn-danger" name="remove" value="{{ it.id }}" title="Uit de lijst halen">✕</button>
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  <div class="comp-save">
+    <button class="btn" type="submit" {% if busy %}disabled{% endif %}>Opslaan</button>
+    <button class="btn btn-primary" type="submit" name="render" value="1" {% if busy %}disabled{% endif %}>{{ 'Opnieuw renderen' if has_video else 'Renderen' }}</button>
+  </div>
+</form>
+
+<section class="card" id="add">
+  <h2>Clip toevoegen</h2>
+  <form method="post" action="/compilations/{{ comp.id }}/add" class="comp-add">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input name="url" type="url" placeholder="https://clips.twitch.tv/… of twitch.tv/naam/clip/…" required aria-label="Twitch-cliplink">
+    <button class="btn" type="submit" {% if comp.items|length >= max_items %}disabled{% endif %}>Toevoegen</button>
+  </form>
+  <p class="hint">Alleen clips van kanalen in je lijst.</p>
+</section>
+
+<form method="post" action="/compilations/{{ comp.id }}/delete" style="margin-top:.5rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button class="btn btn-danger btn-sm" type="submit" data-confirm="Compilatie en video verwijderen?">Compilatie verwijderen</button>
+</form>
+{% endblock %}

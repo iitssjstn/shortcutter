@@ -345,3 +345,74 @@ class Job(Base, JsonMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Compilation(Base, JsonMixin):
+    """Liggende (16:9) compilatievideo van meerdere Twitch-clips, bijv. 'beste clips van de week'."""
+
+    __tablename__ = "compilations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    period: Mapped[str] = mapped_column(String(10), default="week")
+    ranking: Mapped[str] = mapped_column(String(12), default="countdown")  # countdown | top | none
+    intro: Mapped[bool] = mapped_column(Boolean, default=True)
+    outro: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)  # draft|queued|rendering|done|failed
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    stage_message: Mapped[str] = mapped_column(String(300), default="")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    file_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    thumb_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    chapters_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    yt_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hashtags: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    yt_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # queued | uploading | done | failed
+    yt_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    yt_video_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    yt_options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    items: Mapped[list["CompilationItem"]] = relationship(
+        back_populates="compilation", cascade="all, delete-orphan", order_by="CompilationItem.position"
+    )
+
+    @property
+    def chapters(self) -> list:
+        return self._load(self.chapters_json, [])
+
+    @property
+    def included(self) -> list["CompilationItem"]:
+        return [i for i in self.items if i.included]
+
+
+class CompilationItem(Base):
+    __tablename__ = "compilation_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    compilation_id: Mapped[int] = mapped_column(ForeignKey("compilations.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    included: Mapped[bool] = mapped_column(Boolean, default=True)
+    clip_url: Mapped[str] = mapped_column(String(300))
+    slug: Mapped[str] = mapped_column(String(120))
+    title: Mapped[str] = mapped_column(String(200), default="")
+    streamer: Mapped[str] = mapped_column(String(80), default="")
+    channel_login: Mapped[str] = mapped_column(String(40), default="")
+    broadcaster_id: Mapped[str] = mapped_column(String(40), default="")
+    game: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    duration: Mapped[float] = mapped_column(Float, default=0.0)
+    trim_start: Mapped[float] = mapped_column(Float, default=0.0)
+    trim_end: Mapped[float | None] = mapped_column(Float, nullable=True)  # None = tot het einde
+    thumbnail_url: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
+    compilation: Mapped[Compilation] = relationship(back_populates="items")
+
+    @property
+    def length(self) -> float:
+        end = self.trim_end if self.trim_end is not None else self.duration
+        return max(0.0, (end or 0.0) - (self.trim_start or 0.0))
