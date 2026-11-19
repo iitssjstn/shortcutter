@@ -12,6 +12,11 @@
     {% endif %}
   </div>
   <div class="right">
+    {% set n_clips = clip_counts.get(p.id, 0) %}{% set n_posted = posted_counts.get(p.id, 0) %}
+    {% if uploading_counts.get(p.id) %}<span class="badge badge-accent">Uploaden…</span>
+    {% elif n_posted and n_posted >= n_clips %}<span class="badge badge-yt" title="Alle clips staan op YouTube / zijn gepost">▶ Geüpload</span>
+    {% elif n_posted %}<span class="badge badge-yt" title="{{ n_posted }} van {{ n_clips }} clips geüpload/gepost">▶ {{ n_posted }}/{{ n_clips }} geüpload</span>
+    {% elif p.status == 'done' and n_clips %}<span class="badge badge-muted">Niet geüpload</span>{% endif %}
     {% if p.status == 'done' %}<span class="badge badge-ok">Klaar</span>{% if p.warnings %} <span class="badge badge-warn" title="Er zijn waarschuwingen">!</span>{% endif %}
     {% elif p.status == 'failed' %}<span class="badge badge-error">Fout</span>
     {% else %}<span class="badge badge-accent">{{ STATUS_LABELS.get(p.status, p.status) }}</span>{% endif %}

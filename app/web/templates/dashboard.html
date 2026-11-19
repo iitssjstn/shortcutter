@@ -87,8 +87,8 @@
     <h2 style="margin:0">Projecten</h2>
     {% if user.is_admin %}
     <div class="row">
-      <a class="btn btn-sm {{ 'btn-primary' if scope != 'all' }}" href="/?scope=mine">Alleen mijn projecten</a>
-      <a class="btn btn-sm {{ 'btn-primary' if scope == 'all' }}" href="/?scope=all">Alle gebruikers</a>
+      <a class="btn btn-sm {{ 'btn-primary' if scope != 'all' }}" href="/?scope=mine{% if upload %}&upload={{ upload }}{% endif %}">Alleen mijn projecten</a>
+      <a class="btn btn-sm {{ 'btn-primary' if scope == 'all' }}" href="/?scope=all{% if upload %}&upload={{ upload }}{% endif %}">Alle gebruikers</a>
     </div>
     {% endif %}
   </div>

@@ -403,3 +403,12 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
 @media (max-width: 520px) { .w-checks { grid-template-columns: 1fr; } }
 .comp-main .badge { justify-self: start; }
 .w-checks label { flex-wrap: nowrap; white-space: nowrap; margin: 0; }
+.badge-yt { background: rgba(255, 0, 51, .14); color: #ff4d6d; }
+.badge-muted { background: var(--surface-2); color: var(--muted); }
+.project-item .right { display: grid; justify-items: end; gap: .3rem; }
+.upload-filter { display: grid; grid-auto-flow: column; justify-content: start; gap: .4rem; margin-bottom: .6rem; }
+@media (max-width: 860px) {
+  .project-item .right { justify-items: start; grid-auto-flow: column; justify-content: start; }
+  .upload-filter { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .upload-filter .btn { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

@@ -64,15 +64,43 @@ def _clip_counts(db: Session, project_ids: list[int]) -> dict[int, int]:
     return {pid: n for pid, n in rows}
 
 
+_POSTED = (Clip.posted_at.is_not(None)) | (Clip.yt_status == "done")
+UPLOAD_FILTERS = {"": "Alles", "open": "Nog niet geüpload", "gepost": "Geüpload"}
+
+
+def _post_counts(db: Session, project_ids: list[int]) -> tuple[dict[int, int], dict[int, int]]:
+    """(aantal geposte/geüploade clips, aantal clips dat nu uploadt) per project, in één query."""
+    if not project_ids:
+        return {}, {}
+    from sqlalchemy import case
+
+    rows = db.execute(
+        select(Clip.project_id,
+               func.sum(case((_POSTED, 1), else_=0)),
+               func.sum(case((Clip.yt_status.in_(("queued", "uploading")), 1), else_=0)))
+        .where(Clip.project_id.in_(project_ids)).group_by(Clip.project_id)
+    ).all()
+    return ({pid: int(a or 0) for pid, a, _ in rows}, {pid: int(b or 0) for pid, _, b in rows})
+
+
 def _items_ctx(db: Session, projects: list[Project]) -> dict:
     ids = [p.id for p in projects]
     active = [p.id for p in projects if p.status in ACTIVE_STATUSES]
-    return {"projects": projects, "positions": _positions(db, active), "clip_counts": _clip_counts(db, ids)}
+    posted, uploading = _post_counts(db, ids)
+    return {"projects": projects, "positions": _positions(db, active), "clip_counts": _clip_counts(db, ids),
+            "posted_counts": posted, "uploading_counts": uploading}
 
 
-def _dashboard_ctx(db: Session, user: User, scope: str, offset: int = 0) -> dict:
+def _dashboard_ctx(db: Session, user: User, scope: str, offset: int = 0, upload: str = "") -> dict:
     offset = max(0, offset)
-    rows = list(db.scalars(_project_query(user, scope).order_by(Project.created_at.desc(), Project.id.desc())
+    upload = upload if upload in UPLOAD_FILTERS else ""
+    q = _project_query(user, scope)
+    has_posted = select(Clip.id).where(Clip.project_id == Project.id, _POSTED).exists()
+    if upload == "gepost":
+        q = q.where(has_posted)
+    elif upload == "open":
+        q = q.where(~has_posted, Project.status == "done")
+    rows = list(db.scalars(q.order_by(Project.created_at.desc(), Project.id.desc())
                            .offset(offset).limit(PAGE_SIZE + 1)).all())
     projects = rows[:PAGE_SIZE]
     ctx = _items_ctx(db, projects)
@@ -83,14 +111,17 @@ def _dashboard_ctx(db: Session, user: User, scope: str, offset: int = 0) -> dict
         "offset": offset,
         "next_offset": offset + PAGE_SIZE if len(rows) > PAGE_SIZE else None,
         "active_ids": active_ids,
-        "total": db.scalar(select(func.count()).select_from(_project_query(user, scope).subquery())) or 0,
+        "total": db.scalar(select(func.count()).select_from(q.subquery())) or 0,
+        "upload": upload,
+        "upload_filters": UPLOAD_FILTERS,
     })
     return ctx
 
 
 @router.get("/")
-def dashboard(request: Request, scope: str = "mine", user: User = Depends(require_user), db: Session = Depends(get_db)):
-    ctx = _dashboard_ctx(db, user, scope)
+def dashboard(request: Request, scope: str = "mine", upload: str = "", user: User = Depends(require_user),
+              db: Session = Depends(get_db)):
+    ctx = _dashboard_ctx(db, user, scope, upload=upload)
     full_queue = []
     queue_total = 0
     if user.is_admin:
@@ -115,10 +146,10 @@ def dashboard(request: Request, scope: str = "mine", user: User = Depends(requir
 
 
 @router.get("/partials/projects")
-def projects_partial(request: Request, scope: str = "mine", offset: int = 0,
+def projects_partial(request: Request, scope: str = "mine", offset: int = 0, upload: str = "",
                      user: User = Depends(require_user), db: Session = Depends(get_db)):
     """Volgende pagina projecten ('Meer laden')."""
-    return render(request, "partials/project_page.html", _dashboard_ctx(db, user, scope, offset))
+    return render(request, "partials/project_page.html", _dashboard_ctx(db, user, scope, offset, upload))
 
 
 @router.get("/partials/projects/active")

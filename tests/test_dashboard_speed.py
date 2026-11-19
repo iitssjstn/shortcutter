@@ -57,3 +57,23 @@ def test_poll_only_own_projects(two_users):
     db.close()
     r = two_users["bob"].get(f"/partials/projects/active?ids={pid}")
     assert "van alice" not in r.text
+
+
+def test_upload_badges_and_filter(admin_client):
+    from app.core.models import utcnow
+
+    ids = _many(3, 0)
+    db = new_session()
+    clips = {c.project_id: c for c in db.query(Clip).all()}
+    clips[ids[0]].yt_status = "done"
+    clips[ids[0]].posted_at = utcnow()
+    clips[ids[1]].yt_status = "uploading"
+    db.commit()
+    db.close()
+    page = admin_client.get("/").text
+    assert "▶ Geüpload" in page and "Uploaden…" in page and "Niet geüpload" in page
+    posted = admin_client.get("/?upload=gepost").text
+    assert posted.count('class="project-item"') == 1 and f'id="project-{ids[0]}"' in posted
+    open_ = admin_client.get("/?upload=open").text
+    assert open_.count('class="project-item"') == 2 and f'id="project-{ids[0]}"' not in open_
+    assert "upload=open&offset" not in open_  # minder dan één pagina: geen 'Meer laden'
