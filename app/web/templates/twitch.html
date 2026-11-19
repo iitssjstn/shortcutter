@@ -92,7 +92,7 @@
       <div class="twitch-grid">
         {% for c in clips %}{% set ok = c.broadcaster_id in permitted %}
         <div class="twitch-clip {{ 'done' if c.url in imported }} {{ '' if ok else 'locked' }}">
-          {% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" loading="lazy">{% else %}<span class="twitch-thumb-ph"></span>{% endif %}
+          <button type="button" class="tw-play" data-twitch-clip="{{ c.id }}" data-title="{{ c.title }}" title="Clip afspelen" aria-label="Clip afspelen: {{ c.title }}">{% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" loading="lazy">{% else %}<span class="twitch-thumb-ph"></span>{% endif %}<span class="tw-play-icon" aria-hidden="true"></span></button>
           <span class="twitch-clip-body">
             <span class="tw-clip-top">
               <span class="twitch-title">{{ c.title }}</span>
@@ -145,7 +145,7 @@
       <div class="twitch-grid">
         {% for c in clips %}
         <label class="twitch-clip {{ 'done' if c.url in imported }}">
-          {% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" loading="lazy">{% else %}<span class="twitch-thumb-ph"></span>{% endif %}
+          <button type="button" class="tw-play" data-twitch-clip="{{ c.id }}" data-title="{{ c.title }}" title="Clip afspelen" aria-label="Clip afspelen: {{ c.title }}">{% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" loading="lazy">{% else %}<span class="twitch-thumb-ph"></span>{% endif %}<span class="tw-play-icon" aria-hidden="true"></span></button>
           <span class="twitch-clip-body">
             <span class="row" style="justify-content:space-between;flex-wrap:nowrap">
               <span class="twitch-title">{{ c.title }}</span>

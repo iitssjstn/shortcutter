@@ -377,6 +377,7 @@ class Compilation(Base, JsonMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    auto: Mapped[bool] = mapped_column(Boolean, default=False)  # gemaakt door de wekelijkse planning
 
     items: Mapped[list["CompilationItem"]] = relationship(
         back_populates="compilation", cascade="all, delete-orphan", order_by="CompilationItem.position"
@@ -416,3 +417,27 @@ class CompilationItem(Base):
     def length(self) -> float:
         end = self.trim_end if self.trim_end is not None else self.duration
         return max(0.0, (end or 0.0) - (self.trim_start or 0.0))
+
+
+class CompilationSchedule(Base, JsonMixin):
+    """Wekelijkse automatische compilatie per gebruiker: maakt (en rendert) een concept, uploadt niets zelf."""
+
+    __tablename__ = "compilation_schedules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    channel_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    count: Mapped[int] = mapped_column(Integer, default=10)
+    ranking: Mapped[str] = mapped_column(String(12), default="countdown")
+    intro: Mapped[bool] = mapped_column(Boolean, default=True)
+    outro: Mapped[bool] = mapped_column(Boolean, default=True)
+    auto_render: Mapped[bool] = mapped_column(Boolean, default=True)
+    weekday: Mapped[int] = mapped_column(Integer, default=0)  # 0 = maandag
+    hour: Mapped[int] = mapped_column(Integer, default=9)  # lokale tijd
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC
+    last_result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_compilation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    @property
+    def channel_ids(self) -> list[int]:
+        return [int(x) for x in self._load(self.channel_ids_json, []) if str(x).isdigit()]

@@ -209,6 +209,14 @@ Onder **Compilaties** maak je van de best bekeken Twitch-clips één liggende vi
    minstens 10 seconden.
 5. Download de mp4 of upload hem via je gekoppelde YouTube-kanaal (direct of ingepland).
 
+Klik op een miniatuur (in de compilatie of op de Twitch-pagina) om de clip af te spelen
+zonder de pagina te verlaten.
+
+**Wekelijks automatisch**: kies kanalen, dag en tijd (tijdzone uit `TZ`, standaard
+Europe/Amsterdam). Op dat moment maakt Shortcutter een concept met de best bekeken clips
+van de afgelopen week en rendert het meteen als je dat aanzet. Uploaden gebeurt nooit
+vanzelf: je kijkt het eerst na. Met "Nu een concept maken" probeer je het direct uit.
+
 Let op: compilaties van andermans clips ziet YouTube snel als "hergebruikte content",
 wat het te gelde maken van je kanaal kan bemoeilijken. Eigen commentaar of eigen
 inbreng helpt.

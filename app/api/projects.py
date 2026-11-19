@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from app.api.common import redirect, render
@@ -14,7 +15,7 @@ from app.api.uploads import check_upload, save_upload
 from app.core.auth import require_user
 from app.core.db import get_db
 from app.core.keys import active_llm
-from app.core.models import Job, Project, User
+from app.core.models import Clip, Job, Project, User
 from app.core.paths import dir_size, find_source, project_input, project_output, safe_child
 from app.core.store import FRAMING_MODES, get_global_int, get_project_for, user_settings
 from app.estimation.service import clip_estimate, user_calibration
@@ -28,37 +29,85 @@ router = APIRouter()
 PLACEHOLDER = Path(__file__).resolve().parent.parent / "web" / "static" / "placeholder.svg"
 
 
-def _visible_projects(db: Session, user: User, scope: str):
-    q = select(Project).order_by(Project.created_at.desc())
+PAGE_SIZE = 30
+
+
+def _project_query(user: User, scope: str):
+    q = select(Project).options(selectinload(Project.owner))
     if not (user.is_admin and scope == "all"):
         q = q.where(Project.owner_id == user.id)
-    return list(db.scalars(q).all())
+    return q
 
 
-def _dashboard_ctx(db: Session, user: User, scope: str) -> dict:
-    projects = _visible_projects(db, user, scope)
-    positions = {p.id: queue.position(db, p.id) for p in projects if p.status in ACTIVE_STATUSES}
-    return {
-        "projects": projects,
-        "positions": positions,
+def _positions(db: Session, project_ids: list[int]) -> dict[int, int]:
+    """Wachtrijpositie per project in één query (0 = bezig, 1 = volgende ...)."""
+    if not project_ids:
+        return {}
+    jobs = queue.queue(db)  # in volgorde: lopend eerst, dan wachtend
+    out: dict[int, int] = {}
+    waiting = 0
+    for j in jobs:
+        if j.status == "running":
+            out.setdefault(j.project_id, 0)
+        else:
+            waiting += 1
+            out.setdefault(j.project_id, waiting)
+    wanted = set(project_ids)
+    return {pid: pos for pid, pos in out.items() if pid in wanted}
+
+
+def _clip_counts(db: Session, project_ids: list[int]) -> dict[int, int]:
+    if not project_ids:
+        return {}
+    rows = db.execute(select(Clip.project_id, func.count()).where(Clip.project_id.in_(project_ids))
+                      .group_by(Clip.project_id)).all()
+    return {pid: n for pid, n in rows}
+
+
+def _items_ctx(db: Session, projects: list[Project]) -> dict:
+    ids = [p.id for p in projects]
+    active = [p.id for p in projects if p.status in ACTIVE_STATUSES]
+    return {"projects": projects, "positions": _positions(db, active), "clip_counts": _clip_counts(db, ids)}
+
+
+def _dashboard_ctx(db: Session, user: User, scope: str, offset: int = 0) -> dict:
+    offset = max(0, offset)
+    rows = list(db.scalars(_project_query(user, scope).order_by(Project.created_at.desc(), Project.id.desc())
+                           .offset(offset).limit(PAGE_SIZE + 1)).all())
+    projects = rows[:PAGE_SIZE]
+    ctx = _items_ctx(db, projects)
+    # ook actieve projecten die (nog) niet op deze pagina staan blijven gevolgd via de poller
+    active_ids = [p.id for p in projects if p.status in ACTIVE_STATUSES]
+    ctx.update({
         "scope": scope,
-        "any_active": any(p.status in ACTIVE_STATUSES for p in projects),
-    }
+        "offset": offset,
+        "next_offset": offset + PAGE_SIZE if len(rows) > PAGE_SIZE else None,
+        "active_ids": active_ids,
+        "total": db.scalar(select(func.count()).select_from(_project_query(user, scope).subquery())) or 0,
+    })
+    return ctx
 
 
 @router.get("/")
 def dashboard(request: Request, scope: str = "mine", user: User = Depends(require_user), db: Session = Depends(get_db)):
     ctx = _dashboard_ctx(db, user, scope)
     full_queue = []
+    queue_total = 0
     if user.is_admin:
-        for job in queue.queue(db):
-            p = db.get(Project, job.project_id)
+        jobs = queue.queue(db)
+        queue_total = len(jobs)
+        jobs = jobs[:25]  # tabel kort houden; het totaal staat erboven
+        projs = {p.id: p for p in db.scalars(select(Project).options(selectinload(Project.owner))
+                                             .where(Project.id.in_([j.project_id for j in jobs])))} if jobs else {}
+        for job in jobs:
+            p = projs.get(job.project_id)
             full_queue.append({"job": job, "project": p, "owner": p.owner.username if p else "?"})
     ctx.update(
         {
             "settings": user_settings(db, user.id),
             "no_llm_key": active_llm(db) is None,
             "full_queue": full_queue,
+            "queue_total": queue_total,
             "nav": "dashboard",
         }
     )
@@ -66,8 +115,22 @@ def dashboard(request: Request, scope: str = "mine", user: User = Depends(requir
 
 
 @router.get("/partials/projects")
-def projects_partial(request: Request, scope: str = "mine", user: User = Depends(require_user), db: Session = Depends(get_db)):
-    return render(request, "partials/project_list.html", _dashboard_ctx(db, user, scope))
+def projects_partial(request: Request, scope: str = "mine", offset: int = 0,
+                     user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Volgende pagina projecten ('Meer laden')."""
+    return render(request, "partials/project_page.html", _dashboard_ctx(db, user, scope, offset))
+
+
+@router.get("/partials/projects/active")
+def projects_active(request: Request, ids: str = "", user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Lichte poll: alleen de projecten die nog bezig waren, als out-of-band updates."""
+    wanted = [int(x) for x in ids.split(",")[:100] if x.isdigit()]
+    projects = list(db.scalars(_project_query(user, "all" if user.is_admin else "mine")
+                               .where(Project.id.in_(wanted))).all()) if wanted else []
+    ctx = _items_ctx(db, projects)
+    ctx["active_ids"] = [p.id for p in projects if p.status in ACTIVE_STATUSES]
+    ctx["scope"] = "all" if user.is_admin else "mine"
+    return render(request, "partials/project_active.html", ctx)
 
 
 @router.post("/projects")
@@ -319,8 +382,9 @@ def project_thumb(pid: int, user: User = Depends(require_user), db: Session = De
     get_project_for(db, user, pid)
     path = safe_child(project_output(pid), "thumb.jpg")
     if path is None:
-        return FileResponse(PLACEHOLDER, media_type="image/svg+xml")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+        return FileResponse(PLACEHOLDER, media_type="image/svg+xml", headers={"Cache-Control": "private, max-age=60"})
+    # de URL bevat ?v=<laatste wijziging>, dus de browser mag hem lang bewaren
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.get("/projects/{pid}/source")
@@ -364,7 +428,7 @@ def project_json(db: Session, project: Project) -> dict:
 
 @router.get("/api/projects")
 def api_projects(scope: str = "mine", user: User = Depends(require_user), db: Session = Depends(get_db)):
-    return JSONResponse([project_json(db, p) for p in _visible_projects(db, user, scope)])
+    return JSONResponse([project_json(db, p) for p in db.scalars(_project_query(user, scope).order_by(Project.created_at.desc())).all()])
 
 
 @router.get("/api/projects/{pid}")

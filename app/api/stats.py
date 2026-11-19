@@ -17,6 +17,7 @@ from app.estimation.service import user_calibration
 from app.core.store import user_settings
 
 router = APIRouter()
+STATS_ROWS = 50  # rijen in de tabel; de rest via 'alles tonen'
 
 
 def _dur_bucket(d: float) -> str:
@@ -71,7 +72,7 @@ def stats_insights_status(user: User = Depends(require_user)):
 
 
 @router.get("/stats")
-def stats_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def stats_page(request: Request, all: int = 0, user: User = Depends(require_user), db: Session = Depends(get_db)):
     posted = list(
         db.scalars(
             select(Clip).where(Clip.owner_id == user.id, Clip.posted_at.is_not(None)).order_by(Clip.posted_at.desc())
@@ -119,6 +120,7 @@ def stats_page(request: Request, user: User = Depends(require_user), db: Session
         {
             "nav": "stats",
             "posted": posted,
+            "posted_shown": posted if all else posted[:STATS_ROWS],
             "with_views": with_views,
             "acc": acc,
             "cal": cal,

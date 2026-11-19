@@ -48,7 +48,7 @@
 
   {% if user.is_admin %}
   <section class="card">
-    <h2>Wachtrij <span class="badge">{{ full_queue|length }}</span></h2>
+    <h2>Wachtrij <span class="badge">{{ queue_total }}</span></h2>
     {% if full_queue %}
     <div class="table-wrap"><table>
       <thead><tr><th>#</th><th>Project</th><th>Gebruiker</th><th>Taak</th><th>Status</th></tr></thead>
@@ -64,6 +64,7 @@
       {% endfor %}
       </tbody>
     </table></div>
+    {% if queue_total > full_queue|length %}<p class="hint">En nog {{ queue_total - full_queue|length }} taak/taken daarna.</p>{% endif %}
     {% else %}
     <p class="muted">De wachtrij is leeg. De worker verwerkt één job tegelijk.</p>
     {% endif %}

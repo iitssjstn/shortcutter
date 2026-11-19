@@ -381,3 +381,25 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
   .form-3 .field[style] { grid-column: auto !important; }
   .comp-save { max-width: none; }
 }
+.project-more { width: 100%; }
+
+/* ---------- clip afspelen ---------- */
+.tw-play { position: relative; padding: 0; border: 0; background: var(--surface-2); cursor: pointer; display: block; overflow: hidden; }
+.tw-play img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tw-play-icon { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+  background: rgba(0,0,0,.6); transition: transform .15s, background .15s; }
+.tw-play-icon::after { content: ""; position: absolute; left: 15px; top: 11px; border-style: solid; border-width: 9px 0 9px 14px;
+  border-color: transparent transparent transparent #fff; }
+.tw-play:hover .tw-play-icon, .tw-play:focus-visible .tw-play-icon { transform: scale(1.1); background: var(--accent); }
+.twitch-clip > .tw-play { width: 100%; aspect-ratio: 16 / 9; }
+.tw-dialog { width: min(960px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); }
+.tw-dialog::backdrop { background: rgba(0,0,0,.7); }
+.tw-dialog-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .6rem; align-items: center; padding: .6rem .8rem; }
+.tw-dialog-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-dialog-frame { aspect-ratio: 16 / 9; background: #000; }
+.tw-dialog-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+.w-checks { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: .4rem 1.1rem; margin-bottom: .6rem; }
+@media (max-width: 520px) { .w-checks { grid-template-columns: 1fr; } }
+.comp-main .badge { justify-self: start; }
+.w-checks label { flex-wrap: nowrap; white-space: nowrap; margin: 0; }

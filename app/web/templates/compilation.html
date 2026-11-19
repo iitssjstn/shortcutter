@@ -86,11 +86,11 @@
     {% for it in comp.items %}
     <li class="comp-item {{ '' if it.included else 'off' }}" id="item-{{ it.id }}">
       <label class="comp-inc" title="Meenemen"><input type="checkbox" name="inc_{{ it.id }}" value="1" {% if it.included %}checked{% endif %}></label>
-      <span class="comp-ithumb">{% if it.thumbnail_url %}<img src="{{ it.thumbnail_url }}" alt="" loading="lazy">{% endif %}
-        {% if ranks.get(it.id) %}<span class="comp-rank">#{{ ranks[it.id] }}</span>{% endif %}</span>
+      <button type="button" class="comp-ithumb tw-play" data-twitch-clip="{{ it.slug }}" data-title="{{ it.title }}" title="Clip afspelen" aria-label="Clip afspelen: {{ it.title }}">{% if it.thumbnail_url %}<img src="{{ it.thumbnail_url }}" alt="" loading="lazy">{% endif %}
+        {% if ranks.get(it.id) %}<span class="comp-rank">#{{ ranks[it.id] }}</span>{% endif %}<span class="tw-play-icon" aria-hidden="true"></span></button>
       <span class="comp-imain">
         <input type="text" name="title_{{ it.id }}" value="{{ it.title }}" maxlength="200" aria-label="Titel in beeld">
-        <span class="muted">{{ it.streamer }} · {{ '{:,}'.format(it.views).replace(',', '.') }} views · {{ '%.0f'|format(it.duration) }} s{% if it.game %} · {{ it.game }}{% endif %} · <a href="{{ it.clip_url }}" target="_blank" rel="noopener">bekijk</a></span>
+        <span class="muted">{{ it.streamer }} · {{ '{:,}'.format(it.views).replace(',', '.') }} views · {{ '%.0f'|format(it.duration) }} s{% if it.game %} · {{ it.game }}{% endif %} · <a href="{{ it.clip_url }}" target="_blank" rel="noopener">op Twitch ↗</a></span>
       </span>
       <span class="comp-trim">
         <label>Begin<input type="text" name="start_{{ it.id }}" inputmode="decimal" value="{{ '%g'|format(it.trim_start) }}"></label>
