@@ -106,7 +106,8 @@ def generate_for_clips(db: Session, project: Project, clips: list[Clip]) -> tupl
         batch = clips[i: i + batch_size]
         items = build_items(project, batch, with_frames)
         try:
-            result = generate_post_texts(cfg, items, language=lang, insights=insights, trends=trends)
+            result = generate_post_texts(cfg, items, language=lang, insights=insights, trends=trends,
+                                         family=bool(user_settings(db, project.owner_id).safe_mode))
         except LLMError as exc:
             db.commit()
             return done, f"Posttekst genereren mislukt: {exc}"

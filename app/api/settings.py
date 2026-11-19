@@ -79,6 +79,8 @@ def save_user_settings(
     framing_default: str = Form("auto"),
     post_language: str = Form("en"),
     hook_teaser: str = Form(""),
+    safe_mode: str = Form(""),
+    safe_visual: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -91,6 +93,8 @@ def save_user_settings(
     us.framing_default = framing_default if framing_default in FRAMING_MODES else "auto"
     us.post_language = post_language if post_language in POST_LANGUAGES else "en"
     us.hook_teaser = hook_teaser in ("1", "on", "true")
+    us.safe_mode = safe_mode in ("1", "on", "true")
+    us.safe_visual = safe_visual in ("1", "on", "true")
     db.commit()
     return redirect("/settings", "Instellingen opgeslagen.")
 

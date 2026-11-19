@@ -26,6 +26,12 @@
         </select>
         <div class="hint">De ondertitels blijven altijd in de taal van de video.</div></div>
       <label class="row" style="font-weight:500;margin-bottom:.2rem"><input type="checkbox" name="hook_teaser" value="1" {% if us.hook_teaser %}checked{% endif %}> Sterkste moment kort vooraan (teaser)</label>
+      <div class="safe-box">
+        <label class="row" style="font-weight:600;margin-bottom:.2rem"><input type="checkbox" name="safe_mode" value="1" {% if us.safe_mode %}checked{% endif %}> Familievriendelijk (voor alle leeftijden)</label>
+        <div class="hint">Scheldwoorden (NL/EN) worden weggepiept en in de ondertitels gemaskeerd (f***); titels, beschrijvingen en tags worden zonder grove taal geschreven.</div>
+        <label class="row" style="font-weight:500;margin:.4rem 0 .2rem"><input type="checkbox" name="safe_visual" value="1" {% if us.safe_visual %}checked{% endif %}> Beelden laten controleren en vervagen</label>
+        <div class="hint">De AI bekijkt ±1 beeld per seconde op naakt, seksuele inhoud en gore (ook in games, zoals een stripclub in GTA) en vervaagt die momenten. Werkt met een LLM met beeldherkenning; kost iets per clip. Geldt voor clips die (opnieuw) gerenderd worden.</div>
+      </div>
       <div class="hint" style="margin-bottom:.85rem">Nieuwe clips beginnen met ±2 seconden van het sterkste moment (de clou of reactie), daarna de clip vanaf het begin. Zo houd je kijkers in de eerste seconde vast. Per clip uit te zetten.</div>
       <div class="field"><label for="caption_style">Ondertitelstijl</label>
         <select id="caption_style" name="caption_style">

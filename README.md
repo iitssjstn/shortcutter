@@ -227,6 +227,20 @@ Let op: compilaties van andermans clips ziet YouTube snel als "hergebruikte cont
 wat het te gelde maken van je kanaal kan bemoeilijken. Eigen commentaar of eigen
 inbreng helpt.
 
+## Familievriendelijk
+
+Bij **Instellingen → Familievriendelijk** (per gebruiker):
+- Scheldwoorden (Nederlands en Engels) worden met de woordtijden uit het transcript weggepiept en in
+  de ondertitels (ook .srt/.ass) gemaskeerd, bijv. `f***`.
+- Met **Beelden laten controleren** bekijkt een AI-model met beeldherkenning ±1 beeld per seconde op
+  naakt, seksuele inhoud en gore (ook in games) en vervaagt die momenten. Kost iets per clip.
+- Titels, beschrijvingen, hashtags en tags worden zonder grove taal geschreven, en de fragmentkeuze
+  geeft de voorkeur aan geschikte momenten.
+
+Per clip zie je wat er gedaan is. Dit verkleint de kans op een leeftijdsgrens of minder advertenties,
+maar YouTube beslist zelf; kijk twijfelgevallen na. Compilaties (zonder transcript) worden nog niet
+gefilterd.
+
 ## Nakijken, autopilot en Discord
 
 - **Nakijken** (menu): alle klare clips die nog niet geüpload zijn, met video, titel, beschrijving,
