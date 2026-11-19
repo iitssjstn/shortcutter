@@ -45,12 +45,17 @@
   <div class="tw-head">
     <h2 style="margin:0">Wat de AI heeft geleerd</h2>
     <div class="ins-actions">
-      <form method="post" action="/stats/sync"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit">↻ Views nu ophalen</button></form>
-      <form method="post" action="/stats/insights"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit" {% if insights.points < insights.min_points %}disabled{% endif %}>Opnieuw analyseren</button></form>
+      <form method="post" action="/stats/sync"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit" {% if insights.running %}disabled{% endif %}>↻ Views nu ophalen</button></form>
+      <form method="post" action="/stats/insights"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-sm" type="submit" {% if insights.points < insights.min_points or insights.running %}disabled{% endif %}>Opnieuw analyseren</button></form>
     </div>
   </div>
   <p class="hint" style="margin:.4rem 0 .8rem">Views van clips op YouTube worden elke 6 uur automatisch opgehaald{% if insights.synced_at %} (laatst: {{ insights.synced_at|dt }}){% endif %}.
     De AI krijgt deze lessen en je best en slechtst presterende clips mee bij het kiezen van fragmenten en het schrijven van titels. Dat is een richtlijn, geen garantie.</p>
+  {% if insights.running %}
+  <div class="flash" style="margin:0 0 .8rem" hx-get="/stats/insights-status" hx-trigger="every 3s" hx-swap="none">Bezig met ophalen en analyseren… dit kan even duren. Je kunt gewoon verder werken; deze pagina ververst vanzelf.</div>
+  {% elif insights.result %}
+  <div class="flash {{ 'flash-ok' if insights.result[0] else 'flash-error' }}" style="margin:0 0 .8rem">{{ insights.result[1] }}</div>
+  {% endif %}
   {% if insights.points < insights.min_points %}
   <div class="flash flash-warn" style="margin:0">Nog te weinig data: {{ insights.points }} van de {{ insights.min_points }} geposte clips met views. Post meer clips en vul (of laat ophalen) de views in.</div>
   {% elif insights.lessons %}

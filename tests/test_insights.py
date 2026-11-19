@@ -55,6 +55,7 @@ def test_sync_views_with_api_key(admin_client, settings, monkeypatch):
     monkeypatch.setattr(insights, "_client_factory", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
     r = admin_client.post("/stats/sync")
     assert r.status_code == 303
+    insights.wait_idle(user_id("admin"))
     db = new_session()
     views = sorted(db.get(Clip, c).actual_views for c in cids)
     assert views == [1000, 2000] and db.get(Clip, cids[0]).likes in (10, 20)
@@ -85,6 +86,7 @@ def test_lessons_and_prompt_context(admin_client, settings, monkeypatch):
     monkeypatch.setattr(pick, "chat_json", fake_chat)
     r = admin_client.post("/stats/insights")
     assert r.status_code == 303
+    insights.wait_idle(user_id("admin"))
     data_lines = [l for l in seen["prompt"].split("\n") if l.startswith("- ")]
     assert data_lines[0].startswith("- 5000 views") and data_lines[-1].startswith("- 50 views")  # beste eerst
     page = admin_client.get("/stats").text
@@ -111,3 +113,29 @@ def test_insights_reach_the_prompts():
                                     client=httpx.Client(transport=httpx.MockTransport(handler)), sleep=lambda s: None,
                                     insights="Lessen:\n- vragen in de titel werken")
     assert "vragen in de titel werken" in seen["body"]["messages"][1]["content"]
+
+
+def test_background_run_does_not_block(admin_client, settings, monkeypatch):
+    import threading
+
+    _post_all(settings, 5, views=[10, 20, 30, 40, 50])
+    admin_client.post("/keys/llm", data={"name": "OR", "base_url": "https://openrouter.ai/api/v1", "model": "m",
+                                         "api_key": "sk-or-v1-test000000000", "make_active": "1"})
+    gate = threading.Event()
+
+    def slow_chat(cfg, messages, **kw):
+        gate.wait(10)
+        return {"lessen": ["Langzaam maar zeker."]}
+
+    monkeypatch.setattr(pick, "chat_json", slow_chat)
+    assert admin_client.post("/stats/insights").status_code == 303  # komt direct terug
+    page = admin_client.get("/stats").text
+    assert "Bezig met ophalen" in page
+    assert admin_client.get("/stats/insights-status").status_code == 204
+    assert "al een update" in admin_client.post("/stats/insights", follow_redirects=True).text
+    gate.set()
+    insights.wait_idle(user_id("admin"))
+    r = admin_client.get("/stats/insights-status")
+    assert r.status_code == 200 and r.headers.get("HX-Refresh") == "true"
+    page = admin_client.get("/stats").text
+    assert "Langzaam maar zeker." in page and "Lessen bijgewerkt" in page

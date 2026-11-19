@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from datetime import datetime
 
 import httpx
@@ -155,7 +156,7 @@ def refresh_lessons(db: Session, owner_id: int, force: bool = False) -> tuple[bo
             '{"lessen": ["...", "..."]}\n\n' + data_lines)},
     ]
     try:
-        out = pick.chat_json(cfg, messages)
+        out = pick.chat_json(cfg, messages, retries=2, timeout=60.0)
     except LLMError as exc:
         return False, f"Analyseren mislukt: {exc}"
     lessons = [str(x).strip()[:300] for x in (out.get("lessen") or out.get("lessons") or []) if str(x).strip()][:6]
@@ -179,3 +180,73 @@ def context_for_prompt(db: Session, owner_id: int) -> str:
         text += "Lessen:\n" + "\n".join(f"- {x}" for x in lessons) + "\n"
     text += examples_text(rows)
     return text[:MAX_CONTEXT]
+
+
+# ---------------------------------------------------------------- op de achtergrond
+# Ophalen en analyseren kan (met trage modellen en terugvallers) lang duren; dat gebeurt
+# daarom in een aparte thread, zodat de pagina direct terugkomt en niets blijft hangen.
+_bg_lock = threading.Lock()
+_bg_running: dict[int, threading.Thread] = {}
+_bg_result: dict[int, tuple[bool, str]] = {}
+
+
+def is_running(owner_id: int) -> bool:
+    with _bg_lock:
+        t = _bg_running.get(owner_id)
+        return t is not None and t.is_alive()
+
+
+def last_result(owner_id: int) -> tuple[bool, str] | None:
+    with _bg_lock:
+        return _bg_result.pop(owner_id, None)
+
+
+def _bg_job(owner_id: int, sync: bool, force: bool) -> None:
+    from app.core.db import new_session
+
+    db = new_session()
+    ok, msg = True, ""
+    try:
+        if sync:
+            try:
+                n = sync_user_stats(db, owner_id)
+                msg = f"Views van {n} clip(s) bijgewerkt. "
+            except Exception as exc:  # noqa: BLE001 - netwerk/koppeling
+                db.rollback()
+                log.warning("Views ophalen mislukt: %s", type(exc).__name__)
+                ok, msg = False, f"Views ophalen mislukt ({type(exc).__name__}). Is je YouTube-kanaal gekoppeld? "
+        try:
+            done, lesson_msg = refresh_lessons(db, owner_id, force=force)
+            if force and not done:
+                ok = False
+            msg += lesson_msg
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            log.exception("Lessen trekken mislukt")
+            ok, msg = False, msg + f"Analyseren mislukt ({type(exc).__name__})."
+    finally:
+        db.close()
+        with _bg_lock:
+            _bg_result[owner_id] = (ok, msg.strip())
+            _bg_running.pop(owner_id, None)
+
+
+def start_background(owner_id: int, sync: bool, force: bool = False) -> bool:
+    """Start ophalen/analyseren op de achtergrond. False als er al een run bezig is."""
+    with _bg_lock:
+        t = _bg_running.get(owner_id)
+        if t is not None and t.is_alive():
+            return False
+        _bg_result.pop(owner_id, None)
+        t = threading.Thread(target=_bg_job, args=(owner_id, sync, force), daemon=True, name=f"insights-{owner_id}")
+        _bg_running[owner_id] = t
+        t.start()
+        return True
+
+
+def wait_idle(owner_id: int, timeout: float = 30.0) -> None:
+    """Wacht tot een achtergrondrun klaar is (voor tests)."""
+    with _bg_lock:
+        t = _bg_running.get(owner_id)
+    if t is not None:
+        t.join(timeout)
