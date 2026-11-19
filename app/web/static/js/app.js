@@ -344,7 +344,24 @@
   }
 
   // Clips: uitklappen (soepel, duwt de rest omlaag); de clip uit de URL (#clip-ID) staat open
+  function loadPanel(row) {
+    var lazy = row.querySelector(".clip-panel-lazy");
+    if (!lazy || lazy.getAttribute("data-loading")) return;
+    lazy.setAttribute("data-loading", "1");
+    fetch(lazy.getAttribute("data-src"), { credentials: "same-origin", headers: { "Accept": "text/html" } })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) {
+        var tpl = document.createElement("template");
+        tpl.innerHTML = html.trim();
+        lazy.replaceWith(tpl.content);
+      })
+      .catch(function () {
+        lazy.removeAttribute("data-loading");
+        lazy.innerHTML = '<p class="muted" style="padding:1rem;margin:0">Kon de clip niet laden. Klik opnieuw om het nog eens te proberen.</p>';
+      });
+  }
   function setOpen(row, open) {
+    if (open) loadPanel(row);
     row.classList.toggle("open", open);
     var btn = row.querySelector(".clip-toggle");
     if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
@@ -357,15 +374,48 @@
     setOpen(row, !row.classList.contains("open"));
   });
 
-  document.addEventListener("DOMContentLoaded", function () {
+  // Transcript (voor 'Clip handmatig toevoegen') pas ophalen als je het onderdeel opent
+  function loadTranscript(box) {
+    if (box.getAttribute("data-loaded")) return;
+    box.setAttribute("data-loaded", "1");
+    fetch(box.getAttribute("data-src"), { credentials: "same-origin" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (t) {
+        var frag = document.createDocumentFragment();
+        (t.segments || []).forEach(function (sg) {
+          var b = document.createElement("button");
+          b.type = "button"; b.setAttribute("data-seg-start", sg.start); b.setAttribute("data-seg-end", sg.end);
+          var tm = document.createElement("span"); tm.className = "t";
+          var m = Math.floor(sg.start / 60), sec = (sg.start % 60).toFixed(1);
+          tm.textContent = m + ":" + (sec < 10 ? "0" : "") + sec;
+          b.appendChild(tm); b.appendChild(document.createTextNode(sg.text || ""));
+          frag.appendChild(b);
+        });
+        box.innerHTML = "";
+        if (!frag.childNodes.length) box.innerHTML = '<p class="muted" style="margin:.4rem">Nog geen transcript beschikbaar.</p>';
+        box.appendChild(frag);
+      })
+      .catch(function () { box.innerHTML = '<p class="muted" style="margin:.4rem">Nog geen transcript beschikbaar.</p>'; });
+  }
+  document.addEventListener("toggle", function (e) {
+    var d = e.target;
+    if (d.tagName === "DETAILS" && d.open) d.querySelectorAll(".transcript[data-src]").forEach(loadTranscript);
+  }, true);
+
+  function openFromHash() {
     if (location.hash && /^#clip-\d+$/.test(location.hash)) {
       var row = document.querySelector(location.hash);
       if (row && row.classList.contains("clip-row")) {
-        row.style.transition = "none";
         setOpen(row, true);
         setTimeout(function () { row.scrollIntoView({ block: "start" }); }, 50);
       }
     }
+  }
+  window.addEventListener("hashchange", openFromHash);
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("details[open] .transcript[data-src]").forEach(loadTranscript);
+    openFromHash();
     updateSelection();
     document.querySelectorAll(".facecam-picker").forEach(initFacecamPicker);
     var ed = document.getElementById("clip-editor");

@@ -130,13 +130,17 @@ def create_project(
     return redirect(f"/projects/{project.id}", "Project aangemaakt en in de wachtrij gezet.")
 
 
+def _busy(db: Session, project: Project) -> bool:
+    if project.status in ACTIVE_STATUSES:
+        return True
+    if any(c.status in ("pending", "rendering") or c.yt_status in ("queued", "uploading") for c in project.clips):
+        return True
+    return db.scalar(select(Job.id).where(Job.project_id == project.id, Job.status.in_(("queued", "running")))) is not None
+
+
 def _project_ctx(db: Session, user: User, project: Project) -> dict:
     cal = user_calibration(db, project.owner_id)
     clips = [{"clip": c, "est": clip_estimate(db, c, cal)} for c in project.clips]
-    transcript = load_transcript(project.id)
-    rendering = any(c.status in ("pending", "rendering") for c in project.clips) or bool(
-        db.scalar(select(Job.id).where(Job.project_id == project.id, Job.status.in_(("queued", "running"))))
-    )
     out_size = dir_size(project_output(project.id))
     in_size = dir_size(project_input(project.id))
     from app.core.models import YoutubeAccount
@@ -147,10 +151,9 @@ def _project_ctx(db: Session, user: User, project: Project) -> dict:
         "clips": clips,
         "calibration": cal,
         "position": queue.position(db, project.id),
-        "busy": project.status in ACTIVE_STATUSES or rendering,
+        "busy": _busy(db, project),
         "has_source": find_source(project.id) is not None,
         "has_thumb": (project_output(project.id) / "thumb.jpg").exists(),
-        "segments": (transcript or {}).get("segments", []),
         "disk": {"output": out_size, "input": in_size},
         "baseline": user_settings(db, project.owner_id).channel_avg_views,
         "yt_connected": yt_connected,
@@ -178,7 +181,8 @@ def project_page(
 @router.get("/projects/{pid}/status")
 def project_status(request: Request, pid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
     project = get_project_for(db, user, pid)
-    ctx = _project_ctx(db, user, project)
+    # licht: alleen wat de statusbalk nodig heeft (wordt elke paar seconden opgevraagd)
+    ctx = {"project": project, "position": queue.position(db, project.id), "busy": _busy(db, project)}
     resp = render(request, "partials/project_status.html", ctx)
     if not ctx["busy"]:
         resp.headers["HX-Refresh"] = "true"

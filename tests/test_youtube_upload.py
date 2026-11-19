@@ -13,7 +13,7 @@ from app.core.db import new_session
 from app.core.models import Clip, YoutubeAccount, utcnow
 from app.integrations import youtube_upload as yt
 from app.worker.runner import run_job_once
-from tests.conftest import create_user, login, make_client, make_project_with_clip
+from tests.conftest import full_page, create_user, login, make_client, make_project_with_clip
 
 CLIENT_ID = "1234-abc.apps.googleusercontent.com"
 
@@ -107,7 +107,7 @@ def test_upload_clip_marks_posted(admin_client, settings, google, app):
     _setup_oauth(admin_client)
     _connect(admin_client)
     pid, (cid,) = make_project_with_clip(settings, "admin")
-    page = admin_client.get(f"/projects/{pid}").text
+    page = full_page(admin_client, pid)
     assert f'action="/clips/{cid}/youtube"' in page
     r = admin_client.post(f"/clips/{cid}/youtube", data={"title": "Mijn <titel>", "description": "Tekst #shorts", "privacy": "public"})
     assert r.status_code == 303

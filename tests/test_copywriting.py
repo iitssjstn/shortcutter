@@ -10,7 +10,7 @@ from app.pipeline import copywriting as cw
 from app.pipeline import pick
 from app.pipeline.errors import LLMError
 from app.pipeline.pick import LLMConfig
-from tests.conftest import make_project_with_clip
+from tests.conftest import full_page, make_project_with_clip
 
 
 def test_normalize_hashtags():
@@ -82,7 +82,7 @@ def test_generate_buttons(admin_client, settings, monkeypatch):
     assert [c.title for c in clips] == [f"English title {cids[0]}", f"English title {cids[1]}"]
     assert clips[0].post_text == "Would you try this?\n\n#motivation #shorts"
     db.close()
-    page = admin_client.get(f"/projects/{pid}").text
+    page = full_page(admin_client, pid)
     assert "Would you try this?" in page and 'data-copy="ptitle-' in page
 
     def failing(*a, **k):
@@ -155,7 +155,7 @@ def test_project_shows_model_used(project_factory, settings, sample_video, monke
     p = db.get(Project, pid)
     assert p.picker_used == "llm" and p.llm_model == "anthropic/door-auto-gekozen"
     db.close()
-    assert "LLM (anthropic/door-auto-gekozen)" in admin_client.get(f"/projects/{pid}").text
+    assert "LLM (anthropic/door-auto-gekozen)" in full_page(admin_client, pid)
 
 
 from tests.test_pipeline_run import project_factory  # noqa: E402,F401  (fixture hergebruiken)

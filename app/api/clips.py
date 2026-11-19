@@ -51,6 +51,19 @@ def clip_video(cid: int, raw: bool = False, user: User = Depends(require_user), 
     return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": "private, no-cache"})
 
 
+@router.get("/clips/{cid}/panel")
+def clip_panel(request: Request, cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Inhoud van een opengeklapte clip; wordt pas geladen als je de clip openklapt."""
+    from app.core.models import YoutubeAccount
+
+    clip = get_clip_for(db, user, cid)
+    yt_connected = db.scalar(select(YoutubeAccount.id).where(YoutubeAccount.user_id == clip.owner_id)) is not None
+    return render(request, "partials/clip_panel.html", {
+        "item": {"clip": clip, "est": clip_estimate(db, clip)},
+        "yt_connected": yt_connected,
+    })
+
+
 @router.get("/clips/{cid}/thumb")
 def clip_thumb(cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
     clip = get_clip_for(db, user, cid)

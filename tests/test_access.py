@@ -16,7 +16,7 @@ def test_user_cannot_read_other_users_data(data):
     for url in [
         f"/projects/{pb}", f"/projects/{pb}/zip", f"/projects/{pb}/zip-selection?ids={cb}", f"/projects/{pb}/thumb",
         f"/projects/{pb}/source", f"/clips/{cb}/video", f"/clips/{cb}/download", f"/clips/{cb}/download-raw",
-        f"/clips/{cb}/subtitles.srt", f"/clips/{cb}/thumb", f"/api/projects/{pb}", f"/api/projects/{pb}/transcript",
+        f"/clips/{cb}/subtitles.srt", f"/clips/{cb}/thumb", f"/clips/{cb}/panel", f"/api/projects/{pb}", f"/api/projects/{pb}/transcript",
     ]:
         r = alice.get(url)
         assert r.status_code == 404, url

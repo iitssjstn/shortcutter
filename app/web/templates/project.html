@@ -139,11 +139,7 @@
           <p class="hint">Klik in het transcript: eerste klik = start, tweede klik = einde. Of gebruik de knoppen bij de velden.</p>
         </div>
         <div>
-          {% if segments %}
-          <div class="transcript" aria-label="Transcript">
-            {% for s in segments %}<button type="button" data-seg-start="{{ s.start }}" data-seg-end="{{ s.end }}"><span class="t">{{ s.start|ts }}</span>{{ s.text }}</button>{% endfor %}
-          </div>
-          {% else %}<p class="muted">Nog geen transcript beschikbaar.</p>{% endif %}
+          <div class="transcript" data-src="/api/projects/{{ project.id }}/transcript" aria-label="Transcript"><p class="muted" style="margin:.4rem">Transcript laden…</p></div>
         </div>
       </div>
       <form method="post" action="/projects/{{ project.id }}/clips" style="margin-top:1rem">

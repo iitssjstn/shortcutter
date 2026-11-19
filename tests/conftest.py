@@ -164,3 +164,13 @@ def fake_transcript(duration: float = 8.0) -> dict:
     return {"duration": duration, "language": "nl",
             "segments": [{"start": words[0]["start"], "end": words[-1]["end"],
                           "text": " ".join(words_text), "words": words}]}
+
+
+def full_page(c, pid: int) -> str:
+    """Projectpagina plus de inhoud van alle clips (die normaal pas bij openklappen geladen wordt)."""
+    import re
+
+    html = c.get(f"/projects/{pid}").text
+    for src in re.findall(r'data-src="(/clips/\d+/panel)"', html):
+        html += c.get(src).text
+    return html

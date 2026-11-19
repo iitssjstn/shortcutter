@@ -14,7 +14,7 @@ from app.pipeline import run as run_mod
 from app.pipeline.errors import DownloadBlocked, WhisperError
 from app.worker import queue
 from app.worker.runner import run_job_once
-from tests.conftest import fake_transcript, user_id
+from tests.conftest import full_page, fake_transcript, user_id
 
 
 def _fake_transcribe(media, cache, *a, **kw):
@@ -69,7 +69,7 @@ def test_full_pipeline_llm_failure_falls_back(project_factory, settings, sample_
     assert (out / "clips.json").exists() and (out / "transcript.json").exists() and (out / "thumb.jpg").exists()
     db.close()
     # project pagina toont clips en waarschuwing
-    page = admin_client.get(f"/projects/{pid}").text
+    page = full_page(admin_client, pid)
     assert "heuristiek" in page and "Download mp4" in page
     # trim + opnieuw renderen via de wachtrij
     cid = clips[0].id
@@ -94,7 +94,7 @@ def test_download_blocked_then_upload_continues(project_factory, settings, sampl
     p = db.get(Project, pid)
     assert p.status == "failed" and p.error_kind == "download_blocked"
     db.close()
-    page = admin_client.get(f"/projects/{pid}").text
+    page = full_page(admin_client, pid)
     assert "Download geblokkeerd" in page and "upload-source" in page and "Opnieuw proberen" in page
     with open(sample_video, "rb") as fh:
         r = admin_client.post(f"/projects/{pid}/upload-source", files={"file": ("eigen.mp4", fh, "video/mp4")})
@@ -114,7 +114,7 @@ def test_whisper_error_shown(project_factory, settings, sample_video, monkeypatc
     pid = project_factory()
     _put_source(settings, pid, sample_video)
     run_job_once()
-    page = admin_client.get(f"/projects/{pid}").text
+    page = full_page(admin_client, pid)
     assert "Transcriptie mislukt" in page and "laden mislukt" in page
 
 
@@ -140,7 +140,7 @@ def test_render_failure_keeps_raw(project_factory, settings, sample_video, monke
     assert admin_client.get(f"/clips/{c.id}/download-raw").status_code == 200
     assert admin_client.get(f"/clips/{c.id}/download").status_code == 200  # valt terug op raw
     assert admin_client.get(f"/clips/{c.id}/subtitles.ass").status_code == 200
-    assert "Opnieuw renderen" in admin_client.get(f"/projects/{pid}").text
+    assert "Opnieuw renderen" in full_page(admin_client, pid)
 
 
 def test_manual_clip(project_factory, settings, sample_video, monkeypatch, admin_client):
@@ -259,14 +259,14 @@ def test_split_mode_via_clip_route(project_factory, settings, sample_video, monk
     db = new_session()
     cid = db.scalars(select(Clip).where(Clip.project_id == pid)).first().id
     db.close()
-    assert "Gesplitst (facecam boven, gameplay onder)" in admin_client.get(f"/projects/{pid}").text
+    assert "Gesplitst (facecam boven, gameplay onder)" in full_page(admin_client, pid)
     assert admin_client.post(f"/clips/{cid}/framing", data={"mode": "split", "position": "70"}).status_code == 303
     run_job_once()
     db = new_session()
     c = db.get(Clip, cid)
     assert c.framing_mode == "split" and c.framing_choice == "split" and c.crop_x == 0.7 and c.status == "ready"
     db.close()
-    assert "gesplitst" in admin_client.get(f"/projects/{pid}").text
+    assert "gesplitst" in full_page(admin_client, pid)
 
 
 def test_facecam_routes(project_factory, settings, sample_video, monkeypatch, admin_client, app):
@@ -276,7 +276,7 @@ def test_facecam_routes(project_factory, settings, sample_video, monkeypatch, ad
     pid = project_factory()
     _put_source(settings, pid, sample_video)
     run_job_once()
-    assert "Facecam aanwijzen" not in admin_client.get(f"/projects/{pid}").text
+    assert "Facecam aanwijzen" not in full_page(admin_client, pid)
     r = admin_client.get(f"/projects/{pid}/frame.jpg?t=1")
     assert r.status_code == 200 and r.content[:2] == b"\xff\xd8"
     # zonder rechthoek: nette melding

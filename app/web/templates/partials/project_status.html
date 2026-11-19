@@ -1,4 +1,4 @@
-<div id="project-status" hx-get="/projects/{{ project.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML">
+<div id="project-status" hx-get="/projects/{{ project.id }}/status" hx-trigger="every 3s" hx-swap="outerHTML">
   {% if project.status in ACTIVE_STATUSES %}
   <div class="row" style="justify-content:space-between">
     <strong>{{ STATUS_LABELS.get(project.status, project.status) }}</strong>
