@@ -36,6 +36,10 @@ FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", str(FPS),
        "-video_track_timescale", "15360", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+SHORT_W, SHORT_H = 1080, 1920
+MAX_SHORT_ITEMS = 10  # meer past niet leesbaar in het lijstje
+SHORT_MAX_SECONDS = 180  # YouTube Shorts: maximaal 3 minuten
+FORMATS = {"landscape": "Lange video (16:9)", "short": "Short top-lijst (9:16)"}
 RANKINGS = {"countdown": "Aflopend (#10 → #1)", "top": "Beste eerst (#1 → #10)", "none": "Zonder nummers"}
 TEXT_EN = {"featuring": "Featuring", "thanks": "Thanks for watching!", "subscribe": "Subscribe for the next one"}
 TEXT_NL = {"featuring": "Met clips van", "thanks": "Bedankt voor het kijken!", "subscribe": "Abonneer voor de volgende"}
@@ -59,11 +63,14 @@ def rank_of(ranking: str, idx: int, n: int) -> int | None:
     return None
 
 
-def default_title(period: str, streamers: list[str], lang: str) -> str:
+def default_title(period: str, streamers: list[str], lang: str, fmt: str = "landscape") -> str:
     when_en = {"dag": "Today", "week": "of the Week", "maand": "of the Month", "alles": "of All Time"}.get(period, "")
     when_nl = {"dag": "van Vandaag", "week": "van de Week", "maand": "van de Maand", "alles": "Aller Tijden"}.get(period, "")
     week = datetime.utcnow().isocalendar()[1]
     who = streamers[0] if len(set(streamers)) == 1 and streamers else "Twitch"
+    if fmt == "short":
+        n = len(streamers)
+        return f"Top {n} *{who}* momenten" if lang == "nl" else f"Ranking Top {n} *{who}* Moments"
     if lang == "nl":
         base = f"Beste {who} Clips {when_nl}".strip()
     else:
@@ -134,16 +141,16 @@ def clip_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, r
 
 
 def card_segment(bg: Path, bg_at: float, dur: float, out: Path, cwd: Path, *, big: str, small: str,
-                 tag: str) -> None:
+                 tag: str, w: int = W, h: int = H) -> None:
     """Intro/outro: vervaagd, donker beeld uit een clip met grote tekst in het midden."""
     big, small = _ff_text(big, 60), _ff_text(small, 120)
     t1 = _write(cwd, f"{tag}_big.txt", big)
     t2 = _write(cwd, f"{tag}_small.txt", small)
-    big_size = fit_size(big, 92, 0.64)
-    small_size = fit_size(small, 40, 0.56)
+    big_size = fit_size(big, 92, 0.64, w - 120)
+    small_size = fit_size(small, 40, 0.56, w - 120)
     fo = max(0.0, dur - 0.4)
     vf = (
-        f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS},"
+        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps={FPS},"
         "boxblur=24:2,eq=brightness=-0.22:saturation=0.8,format=yuv420p,"
         "drawbox=x=0:y=ih/2-190:w=iw:h=330:color=black@0.45:t=fill,"
         + _drawtext(t1, big_size, "(w-text_w)/2", "(h-text_h)/2-50") + ","
@@ -156,6 +163,155 @@ def card_segment(bg: Path, bg_at: float, dur: float, out: Path, cwd: Path, *, bi
            "-filter_complex", vf, "-map", "[v]", "-map", "1:a", "-t", f"{dur:.3f}",
            *ENC, str(out.resolve())]
     _run(cmd, cwd=cwd)
+
+
+# ---------------------------------------------------------------- short top-lijst (9:16)
+SHORT_MARGIN = 36  # vervaagde rand rond de video
+RANK_COLORS = {1: (245, 197, 24), 2: (225, 225, 225), 3: (224, 123, 57)}  # goud, zilver, brons
+TITLE_ACCENT = (64, 220, 72)  # 'Top 5' groen
+TITLE_MARK = (235, 40, 40)  # *woord* rood
+_EMOJI = re.compile("[\U00010000-\U0010FFFF\u2600-\u27BF\uFE0F]")
+
+
+def _font(size: int, bold: bool = True):
+    from PIL import ImageFont
+
+    path = FONT_BOLD if bold else FONT
+    try:
+        return ImageFont.truetype(path, size)
+    except OSError:
+        return ImageFont.load_default(size)
+
+
+def _title_words(title: str) -> list[tuple[str, tuple[int, int, int]]]:
+    """Woorden met kleur: 'Top <n>' groen, *woord* rood, de rest wit."""
+    words = _EMOJI.sub("", title or "").split()
+    out, i = [], 0
+    while i < len(words):
+        w = words[i]
+        if w.lower() == "top" and i + 1 < len(words) and words[i + 1].isdigit():
+            out += [(w, TITLE_ACCENT), (words[i + 1], TITLE_ACCENT)]
+            i += 2
+            continue
+        if len(w) > 2 and w.startswith("*") and w.endswith("*"):
+            out.append((w.strip("*"), TITLE_MARK))
+        else:
+            out.append((w.replace("*", ""), (255, 255, 255)))
+        i += 1
+    return out
+
+
+def _wrap_words(words, font, max_w: int, draw) -> list[list[tuple[str, tuple]]]:
+    lines, cur = [], []
+    for wd in words:
+        trial = cur + [wd]
+        if cur and draw.textlength(" ".join(x for x, _ in trial), font=font) > max_w:
+            lines.append(cur)
+            cur = [wd]
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def short_overlay(path: Path, title: str, list_lines: list[tuple[int, str, str]], credit: str) -> None:
+    """Tekstlaag (PNG met transparantie): titel bovenaan en links het genummerde lijstje.
+
+    Grote witte letters met een dikke zwarte rand, zoals in populaire 'Ranking top 5'-shorts;
+    nog niet getoonde plaatsen tonen alleen het nummer.
+    """
+    from PIL import Image, ImageDraw
+
+    w, h = SHORT_W, SHORT_H
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    # titel: maximaal 2 regels, zo groot als past
+    words = _title_words(title) or [("Top clips", (255, 255, 255))]
+    for size in (96, 88, 80, 72, 64, 56, 48):
+        f = _font(size)
+        lines = _wrap_words(words, f, w - 2 * 60, d)
+        if len(lines) <= 2:
+            break
+    lines = lines[:2]
+    y = 70
+    for line in lines:
+        total = d.textlength(" ".join(x for x, _ in line), font=f)
+        x = (w - total) / 2
+        for word, color in line:
+            d.text((x, y), word, font=f, fill=color, stroke_width=max(4, size // 14), stroke_fill=(0, 0, 0))
+            x += d.textlength(word + " ", font=f)
+        y += int(size * 1.12)
+    if credit:
+        fc = _font(30, bold=False)
+        d.text((w - SHORT_MARGIN - 16 - d.textlength(credit, font=fc), y + 6), credit, font=fc,
+               fill=(255, 255, 255, 220), stroke_width=2, stroke_fill=(0, 0, 0))
+    # lijstje links: nummer in medaillekleur, getoonde clips met hun titel
+    if list_lines:
+        n = len(list_lines)
+        top = max(y + 70, 330)
+        step = min(165, int((h * 0.62 - top) / max(1, n - 1))) if n > 1 else 0
+        num_size = 84 if n <= 5 else (72 if n <= 7 else 60)
+        txt_size = int(num_size * 0.62)
+        fn, ft = _font(num_size), _font(txt_size)
+        for i, (rank, text, state) in enumerate(list_lines):
+            yy = top + i * step
+            label = f"{rank}."
+            d.text((SHORT_MARGIN + 18, yy), label, font=fn, fill=RANK_COLORS.get(rank, (255, 255, 255)),
+                   stroke_width=6, stroke_fill=(0, 0, 0))
+            if state != "nog":
+                tx = SHORT_MARGIN + 18 + d.textlength(label + " ", font=fn)
+                room = w - tx - SHORT_MARGIN - 16
+                t = _EMOJI.sub("", text or "").strip()
+                while t and d.textlength(t, font=ft) > room:
+                    t = t[:-2].rstrip() + "…" if len(t) > 2 else ""
+                d.text((tx, yy + (num_size - txt_size) * 0.55), t, font=ft, fill=(255, 255, 255),
+                       stroke_width=5, stroke_fill=(0, 0, 0))
+    img.save(path)
+
+
+def short_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, title: str,
+                  list_lines: list[tuple[int, str, str]], credit: str, has_audio: bool, tag: str) -> None:
+    """Eén clip als staand 1080x1920-segment: de video vult het beeld (met een smalle vervaagde rand),
+    met daarover de titel en het genummerde lijstje."""
+    w, h = SHORT_W, SHORT_H
+    ov = cwd / f"{tag}_overlay.png"
+    short_overlay(ov, title, list_lines, credit)
+    fw, fh = w - 2 * SHORT_MARGIN, h - 2 * SHORT_MARGIN
+    fo = max(0.0, dur - 0.25)
+    vf = (
+        "[0:v]split=2[bga][fga];"
+        f"[bga]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,"
+        "boxblur=24:2,eq=brightness=-0.1:saturation=0.8[bg];"
+        f"[fga]scale={fw}:{fh}:force_original_aspect_ratio=increase,crop={fw}:{fh},setsar=1[fg];"
+        f"[bg][fg]overlay={SHORT_MARGIN}:{SHORT_MARGIN}[base];"
+        f"[base][2:v]overlay=0:0,fps={FPS},format=yuv420p,"
+        f"fade=t=in:st=0:d=0.2,fade=t=out:st={fo:.2f}:d=0.25[v]"
+    )
+    a_in = "[0:a:0]" if has_audio else "[1:a]"
+    af = (f"{a_in}aresample=48000,aformat=channel_layouts=stereo,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,"
+          f"afade=t=in:st=0:d=0.15,afade=t=out:st={fo:.2f}:d=0.25[a]")
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-nostdin",
+           "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", str(src.resolve()),
+           "-f", "lavfi", "-t", f"{dur:.3f}", "-i", "anullsrc=r=48000:cl=stereo",
+           "-loop", "1", "-t", f"{dur:.3f}", "-i", ov.name,
+           "-filter_complex", vf + ";" + af, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.3f}",
+           *ENC, str(out.resolve())]
+    _run(cmd, cwd=cwd)
+
+
+def short_list(ranking: str, items: list[CompilationItem], k: int) -> list[tuple[int, str, str]]:
+    """Het lijstje bij clip k: plaats 1 bovenaan; al getoonde clips met titel, de rest '???'."""
+    n = len(items)
+    if ranking == "none":
+        return []
+    by_rank = {rank_of(ranking, i, n): (i, it) for i, it in enumerate(items)}
+    out = []
+    for r in range(1, n + 1):
+        i, it = by_rank[r]
+        state = "nu" if i == k else ("gezien" if i < k else "nog")
+        out.append((r, it.title, state))
+    return out
 
 
 def concat(segments: list[Path], out: Path, cwd: Path) -> None:
@@ -189,14 +345,15 @@ def _lang(db: Session, owner_id: int) -> str:
     return "nl" if lang == "nl" else "en"
 
 
-def _hashtags(raw) -> str:
+def _hashtags(raw, short: bool = False) -> str:
+    """Hashtags netjes maken. Lange video: nooit #shorts; short: altijd #shorts."""
     items = re.split(r"[\s,]+", raw) if isinstance(raw, str) else [str(x) for x in (raw or [])]
-    tags: list[str] = []
+    tags: list[str] = ["#shorts"] if short else []
     for t in items:
         t = re.sub(r"[^\w]", "", t.strip().lstrip("#"), flags=re.UNICODE)
         if t and t.lower() != "shorts" and ("#" + t).lower() not in {x.lower() for x in tags}:
             tags.append("#" + t)
-    return " ".join(tags[:5])
+    return " ".join(tags[:6 if short else 5])
 
 
 def compose_description(intro: str, comp: Compilation) -> str:
@@ -227,14 +384,15 @@ def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str]:
     n = len(items)
     streamers = sorted({i.streamer for i in items if i.streamer})
     games = sorted({i.game for i in items if i.game})
-    fallback_title = comp.title or default_title(comp.period, [i.streamer for i in items], lang)
+    short = comp.format == "short"
+    fallback_title = (comp.title or default_title(comp.period, [i.streamer for i in items], lang, comp.format)).replace("*", "")
     if lang == "nl":
         fallback_intro = (f"De {n} beste clips van {', '.join(streamers[:5]) or 'Twitch'}"
                           + (f" in {', '.join(games[:3])}" if games else "") + ". Welke was jouw favoriet?")
     else:
         fallback_intro = (f"The top {n} clips from {', '.join(streamers[:5]) or 'Twitch'}"
                           + (f" in {', '.join(games[:3])}" if games else "") + ". Which one was your favorite?")
-    fallback_tags = _hashtags(["twitch", "twitchclips"] + [s.replace(" ", "") for s in streamers[:2]]
+    fallback_tags = _hashtags(short=short, raw=["twitch", "twitchclips"] + [s.replace(" ", "") for s in streamers[:2]]
                               + [g.replace(" ", "") for g in games[:1]])
     cfg = load_llm_config(db, "copy")
     if cfg is None:
@@ -245,15 +403,16 @@ def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str]:
     language = "Nederlands" if lang == "nl" else "English"
     messages = [
         {"role": "system", "content": "You write YouTube titles and descriptions for Twitch clip compilations "
-                                      "(long-form, landscape). Answer only with JSON."},
+                                      + ("(a vertical YouTube Short with a top-N ranking). " if short else "(long-form, landscape). ")
+                                      + "Answer only with JSON."},
         {"role": "user", "content": (
             f"Language: {language}. Write for this compilation:\n"
-            "- title: max 80 characters, catchy but honest, no clickbait lies, may mention the streamer(s) or game; "
+            f"- title: max {60 if short else 80} characters, catchy but honest, no clickbait lies, may mention the streamer(s) or game; "
             f"working title is '{fallback_title}'.\n"
             "- description: 2-3 short sentences that make people want to watch; do NOT list chapters or links "
             "(those are added automatically).\n"
-            "- hashtags: 3-5 relevant hashtags (no #shorts).\n"
-            'JSON: {"title": "...", "description": "...", "hashtags": ["#..."]}\n\nClips in order:\n' + lines)},
+            + ("- hashtags: 3-5 relevant hashtags.\n" if short else "- hashtags: 3-5 relevant hashtags (no #shorts).\n")
+            + 'JSON: {"title": "...", "description": "...", "hashtags": ["#..."]}\n\nClips in order:\n' + lines)},
     ]
     try:
         out = pick.chat_json(cfg, messages, retries=2, timeout=60.0)
@@ -262,7 +421,7 @@ def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str]:
         return fallback_title, fallback_intro, fallback_tags
     title = _ff_text(str(out.get("title") or ""), 100) or fallback_title
     intro = str(out.get("description") or "").strip()[:1500] or fallback_intro
-    tags = _hashtags(out.get("hashtags")) or fallback_tags
+    tags = _hashtags(out.get("hashtags"), short) or fallback_tags
     return title, intro, tags
 
 
@@ -278,9 +437,13 @@ def render_compilation(db: Session, cid: int) -> None:
     comp = db.get(Compilation, cid)
     if comp is None:
         return
-    items = comp.included[:MAX_ITEMS]
+    short = comp.format == "short"
+    items = comp.included[: MAX_SHORT_ITEMS if short else MAX_ITEMS]
     if len(items) < 2:
         raise RenderError("Kies minstens 2 clips voor een compilatie.")
+    if short and sum(i.length for i in items) > SHORT_MAX_SECONDS + 0.5:
+        raise RenderError(f"Een short mag maximaal {SHORT_MAX_SECONDS // 60} minuten duren. Kort clips in of haal er een weg.")
+    fw, fh = (SHORT_W, SHORT_H) if short else (W, H)
     base = comp_dir(cid)
     work = base / "work"
     shutil.rmtree(work, ignore_errors=True)
@@ -312,8 +475,9 @@ def render_compilation(db: Session, cid: int) -> None:
     if comp.intro:
         _set(db, comp, 46, "Intro maken")
         seg = work / "seg_intro.mp4"
-        card_segment(top_src, bg_at, INTRO_SECONDS, seg, work, big=comp.title or "Twitch Clips",
-                     small=f"{words['featuring']} {', '.join(streamers[:6])}" if streamers else "", tag="intro")
+        card_segment(top_src, bg_at, INTRO_SECONDS, seg, work, big=(comp.title or "Twitch Clips").replace("*", ""),
+                     small=f"{words['featuring']} {', '.join(streamers[:6])}" if streamers else "", tag="intro",
+                     w=fw, h=fh)
         segments.append(seg)
         t += media.probe(seg)["duration"]
     for k, it in enumerate(items):
@@ -325,9 +489,14 @@ def render_compilation(db: Session, cid: int) -> None:
         dur = max(1.0, end - start)
         rank = rank_of(comp.ranking, k, n)
         seg = work / f"seg_{k:02d}.mp4"
-        clip_segment(src, start, dur, seg, work, rank=rank, title=it.title,
-                     credit=f"twitch.tv/{it.channel_login}" if it.channel_login else it.streamer,
-                     has_audio=info["has_audio"], tag=f"c{k:02d}")
+        credit = f"twitch.tv/{it.channel_login}" if it.channel_login else it.streamer
+        if short:
+            short_segment(src, start, dur, seg, work, title=comp.title or "Top clips",
+                          list_lines=short_list(comp.ranking, items, k), credit=credit,
+                          has_audio=info["has_audio"], tag=f"c{k:02d}")
+        else:
+            clip_segment(src, start, dur, seg, work, rank=rank, title=it.title, credit=credit,
+                         has_audio=info["has_audio"], tag=f"c{k:02d}")
         segments.append(seg)
         starts.append((t, item_label(it, rank)))
         t += media.probe(seg)["duration"]
@@ -336,7 +505,7 @@ def render_compilation(db: Session, cid: int) -> None:
         seg = work / "seg_outro.mp4"
         card_segment(top_src, bg_at, OUTRO_SECONDS, seg, work, big=words["thanks"],
                      small=(f"{words['featuring']} " + " · ".join(streamers[:8])) if streamers else words["subscribe"],
-                     tag="outro")
+                     tag="outro", w=fw, h=fh)
         segments.append(seg)
 
     # 3. aan elkaar plakken
@@ -344,16 +513,16 @@ def render_compilation(db: Session, cid: int) -> None:
     out = base / "compilation.mp4"
     concat(segments, out, work)
     info = media.probe(out)
-    if (info["width"], info["height"]) != (W, H):
+    if (info["width"], info["height"]) != (fw, fh):
         raise RenderError(f"Onverwachte resolutie {info['width']}x{info['height']}.")
     thumb = base / "thumb.jpg"
     top_index = items.index(top_item)
     top_start = next((s for s, _ in starts[top_index:top_index + 1]), 0.0)
-    media.thumbnail(out, thumb, at=top_start + 2.0, width=1280)
+    media.thumbnail(out, thumb, at=top_start + 2.0, width=720 if short else 1280)
     comp.file_path = out.name
     comp.thumb_path = thumb.name if thumb.exists() else None
     comp.duration = info["duration"]
-    comp.chapters_json = json.dumps(build_chapters(starts), ensure_ascii=False)
+    comp.chapters_json = json.dumps([] if short else build_chapters(starts), ensure_ascii=False)
     shutil.rmtree(work, ignore_errors=True)
 
     # 4. titel en beschrijving (alleen invullen als de gebruiker nog niets eigens heeft)

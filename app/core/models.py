@@ -378,6 +378,7 @@ class Compilation(Base, JsonMixin):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     auto: Mapped[bool] = mapped_column(Boolean, default=False)  # gemaakt door de wekelijkse planning
+    format: Mapped[str] = mapped_column(String(10), default="landscape")  # landscape (16:9) | short (9:16 top-lijst)
 
     items: Mapped[list["CompilationItem"]] = relationship(
         back_populates="compilation", cascade="all, delete-orphan", order_by="CompilationItem.position"
@@ -432,6 +433,7 @@ class CompilationSchedule(Base, JsonMixin):
     intro: Mapped[bool] = mapped_column(Boolean, default=True)
     outro: Mapped[bool] = mapped_column(Boolean, default=True)
     auto_render: Mapped[bool] = mapped_column(Boolean, default=True)
+    format: Mapped[str] = mapped_column(String(10), default="landscape")
     weekday: Mapped[int] = mapped_column(Integer, default=0)  # 0 = maandag
     hour: Mapped[int] = mapped_column(Integer, default=9)  # lokale tijd
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC

@@ -30,6 +30,9 @@
         </div>
         <p class="hint">Meer kanalen toevoegen doe je op de <a href="/twitch">Twitch-pagina</a>.</p>
       </div>
+      <div class="field"><label for="c-format">Formaat</label>
+        <select id="c-format" name="format">{% for k, v in formats.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+        <p class="hint">Short top-lijst: staand, clips groot in beeld met klein een lijstje #1–#{{ max_short }} dat zich vult (max. {{ max_short }} clips, max. 3 min).</p></div>
       <div class="form-2">
         <div class="field"><label for="c-period">Periode</label>
           <select id="c-period" name="period">{% for k, v in periods.items() %}<option value="{{ k }}" {% if k == 'week' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
@@ -62,6 +65,8 @@
             {% endfor %}
           </div>
         </div>
+        <div class="field"><label for="w-format">Formaat</label>
+          <select id="w-format" name="format">{% for k, v in formats.items() %}<option value="{{ k }}" {% if k == sched.format %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
         <div class="form-2">
           <div class="field"><label for="w-day">Dag</label>
             <select id="w-day" name="weekday">{% for d in weekdays %}<option value="{{ loop.index0 }}" {% if loop.index0 == sched.weekday %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
@@ -95,7 +100,7 @@
     <a class="card comp-row" href="/compilations/{{ c.id }}">
       <span class="comp-thumb">{% if c.thumb_path %}<img src="/compilations/{{ c.id }}/thumb" alt="" loading="lazy">{% endif %}</span>
       <span class="comp-main">
-        <strong>{{ c.title }}</strong>{% if c.auto %} <span class="badge">automatisch</span>{% endif %}
+        <strong>{{ c.title }}</strong>{% if c.format == 'short' %} <span class="badge badge-accent">short</span>{% endif %}{% if c.auto %} <span class="badge">automatisch</span>{% endif %}
         <span class="muted">{{ c.included|length }} clips{% if c.duration %} · {{ (c.duration // 60)|int }}:{{ '%02d'|format((c.duration % 60)|int) }}{% endif %} · {{ c.created_at|dt }}</span>
       </span>
       <span>

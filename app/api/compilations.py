@@ -49,7 +49,8 @@ def list_page(request: Request, user: User = Depends(require_user), db: Session 
         "nav": "compilations", "comps": comps, "channels": _channels(db, user),
         "sched": sched, "weekdays": weekly.WEEKDAYS, "next_run": weekly.next_slot(sched) if sched.enabled else None,
         "has_key": twitch.credential(db) is not None, "periods": twitch.PERIOD_LABELS,
-        "max_items": cp.MAX_ITEMS, "rankings": cp.RANKINGS,
+        "max_items": cp.MAX_ITEMS, "rankings": cp.RANKINGS, "formats": cp.FORMATS,
+        "max_short": cp.MAX_SHORT_ITEMS,
     })
 
 
@@ -73,7 +74,7 @@ async def create(request: Request, user: User = Depends(require_user), db: Sessi
         except (TypeError, ValueError):
             continue
     try:
-        comp = weekly.build_draft(db, user.id, picked, period, count, ranking)
+        comp = weekly.build_draft(db, user.id, picked, period, count, ranking, str(form.get("format", "landscape")))
     except weekly.DraftError as exc:
         return redirect("/compilations", str(exc), "error")
     top = comp.items
@@ -113,6 +114,8 @@ async def save_schedule(request: Request, user: User = Depends(require_user), db
     s.intro = form.get("intro") in ("1", "on")
     s.outro = form.get("outro") in ("1", "on")
     s.auto_render = form.get("auto_render") in ("1", "on")
+    f = str(form.get("format", "landscape"))
+    s.format = f if f in cp.FORMATS else "landscape"
     if enabled and not was_enabled:
         s.last_run_at = utcnow()  # niet meteen alsnog een gemist moment inhalen; eerstvolgende moment telt
     db.commit()
@@ -143,7 +146,7 @@ def detail(request: Request, cid: int, user: User = Depends(require_user), db: S
     total = sum(i.length for i in comp.included) + (cp.INTRO_SECONDS if comp.intro else 0) + (cp.OUTRO_SECONDS if comp.outro else 0)
     return render(request, "compilation.html", {
         "nav": "compilations", "comp": comp, "ranks": ranks, "total": total, "rankings": cp.RANKINGS,
-        "busy": comp.status in BUSY, "fmt_ts": cp.fmt_ts, "has_video": bool(safe_child(cp.comp_dir(cid), comp.file_path)),
+        "busy": comp.status in BUSY, "formats": cp.FORMATS, "short_max": cp.SHORT_MAX_SECONDS, "fmt_ts": cp.fmt_ts, "has_video": bool(safe_child(cp.comp_dir(cid), comp.file_path)),
         "yt_account": account_for(db, user.id), "privacy": yt.PRIVACY, "max_items": cp.MAX_ITEMS,
     })
 
@@ -244,6 +247,12 @@ def _start_render(db: Session, comp: Compilation):
         return redirect(f"/compilations/{comp.id}", "Vink minstens 2 clips aan.", "error")
     if len(comp.included) > cp.MAX_ITEMS:
         return redirect(f"/compilations/{comp.id}", f"Maximaal {cp.MAX_ITEMS} clips.", "error")
+    if comp.format == "short":
+        if len(comp.included) > cp.MAX_SHORT_ITEMS:
+            return redirect(f"/compilations/{comp.id}", f"Een short-top-lijst kan maximaal {cp.MAX_SHORT_ITEMS} clips hebben.", "error")
+        total = sum(i.length for i in comp.included)
+        if total > cp.SHORT_MAX_SECONDS + 0.5:
+            return redirect(f"/compilations/{comp.id}", f"Samen {total:.0f} s: een short mag maximaal {cp.SHORT_MAX_SECONDS // 60} minuten duren. Kort clips in (Eind) of vink er een uit.", "error")
     comp.status = "queued"
     comp.attempts = 0
     comp.progress = 0
@@ -296,7 +305,7 @@ def save_text(cid: int, title: str = Form(""), description: str = Form(""), hash
     comp = _comp(db, user, cid)
     comp.yt_title = title.strip()[: yt.TITLE_MAX] or comp.yt_title
     comp.description = description.strip()[: yt.DESC_MAX]
-    comp.hashtags = cp._hashtags(hashtags) or None
+    comp.hashtags = cp._hashtags(hashtags, comp.format == "short") or None
     db.commit()
     return redirect(f"/compilations/{cid}#youtube", "Titel en beschrijving opgeslagen.")
 
@@ -332,7 +341,7 @@ def upload(
         raise HTTPException(400, "De titel mag niet leeg zijn.")
     comp.yt_title = t
     comp.description = description.strip()[: yt.DESC_MAX]
-    comp.hashtags = cp._hashtags(hashtags) or comp.hashtags
+    comp.hashtags = cp._hashtags(hashtags, comp.format == "short") or comp.hashtags
     comp.yt_options_json = json.dumps({
         "title": t, "description": comp.description, "privacy": "private" if when else privacy,
         "publish_at": yt.to_rfc3339(when) if when else None, "made_for_kids": made_for_kids in ("1", "on", "true"),

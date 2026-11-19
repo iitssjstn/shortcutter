@@ -5,7 +5,9 @@
   <div>
     <p class="muted" style="margin:0"><a href="/compilations">← Compilaties</a></p>
     <h1>{{ comp.title }}</h1>
-    <p class="muted">{{ comp.included|length }} van {{ comp.items|length }} clips gekozen · ±{{ fmt_ts(total) }} · liggend 1920×1080</p>
+    <p class="muted">{{ comp.included|length }} van {{ comp.items|length }} clips gekozen · ±{{ fmt_ts(total) }} · {{ 'staand 1080×1920 (short)' if comp.format == 'short' else 'liggend 1920×1080' }}</p>
+    {% if comp.format == 'short' and total > short_max %}<div class="flash flash-error" style="margin:.4rem 0 0">Samen {{ fmt_ts(total) }}: een short mag maximaal 3 minuten zijn. Kort clips in of vink er een uit.</div>
+    {% elif comp.format == 'short' and total > 60 %}<p class="hint" style="margin:.2rem 0 0">Langer dan 60 s mag (tot 3 min), maar korte shorts worden vaker uitgekeken.</p>{% endif %}
   </div>
 </div>
 
@@ -22,7 +24,7 @@
 {% endif %}
 
 {% if has_video and not busy %}
-<section class="card comp-result">
+<section class="card comp-result {{ 'is-short' if comp.format == 'short' }}">
   <video src="/compilations/{{ comp.id }}/video" controls preload="metadata" {% if comp.thumb_path %}poster="/compilations/{{ comp.id }}/thumb"{% endif %}></video>
   <div>
     <div class="action-grid">
@@ -31,7 +33,7 @@
     {% if comp.chapters %}
     <h3 style="margin:1rem 0 .4rem">Hoofdstukken</h3>
     <ol class="comp-chapters">{% for c in comp.chapters %}<li><span class="mono">{{ fmt_ts(c.t) }}</span> {{ c.label }}</li>{% endfor %}</ol>
-    {% else %}
+    {% elif comp.format != 'short' %}
     <p class="hint">Geen hoofdstukken: YouTube vraagt er minstens 3 van elk minstens 10 seconden.</p>
     {% endif %}
   </div>
@@ -72,9 +74,11 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <h2>Instellingen en clips</h2>
   <div class="form-3">
-    <div class="field" style="grid-column: span 2"><label for="c-title">Titel in de intro</label><input id="c-title" type="text" name="title" maxlength="200" value="{{ comp.title }}"></div>
+    <div class="field" style="grid-column: span 2"><label for="c-title">{{ 'Titel bovenaan in beeld' if comp.format == 'short' else 'Titel in de intro' }}</label><input id="c-title" type="text" name="title" maxlength="200" value="{{ comp.title }}">
+      {% if comp.format == 'short' %}<p class="hint">"Top 5" wordt groen; zet een woord tussen sterretjes voor rood, bijv. <code>Ranking Top 5 *Speed* Moments</code>.</p>{% endif %}</div>
     <div class="field"><label for="c-rank">Nummering</label>
-      <select id="c-rank" name="ranking">{% for k, v in rankings.items() %}<option value="{{ k }}" {% if k == comp.ranking %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+      <select id="c-rank" name="ranking">{% for k, v in rankings.items() %}<option value="{{ k }}" {% if k == comp.ranking %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+      {% if comp.format == 'short' %}<p class="hint">"Zonder nummers" = geen lijstje in beeld.</p>{% endif %}</div>
   </div>
   <div class="row" style="gap:1.2rem;margin-bottom:.8rem">
     <label class="row" style="font-weight:500"><input type="checkbox" name="intro" value="1" {% if comp.intro %}checked{% endif %}> Introscherm (3 s)</label>
