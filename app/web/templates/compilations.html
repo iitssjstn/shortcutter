@@ -100,7 +100,7 @@
     <a class="card comp-row" href="/compilations/{{ c.id }}">
       <span class="comp-thumb">{% if c.thumb_path %}<img src="/compilations/{{ c.id }}/thumb" alt="" loading="lazy">{% endif %}</span>
       <span class="comp-main">
-        <strong>{{ c.title }}</strong>{% if c.format == 'short' %} <span class="badge badge-accent">short</span>{% endif %}{% if c.auto %} <span class="badge">automatisch</span>{% endif %}
+        <strong>{{ c.title|replace("*", "") }}</strong>{% if c.format == 'short' %} <span class="badge badge-accent">short</span>{% endif %}{% if c.auto %} <span class="badge">automatisch</span>{% endif %}
         <span class="muted">{{ c.included|length }} clips{% if c.duration %} · {{ (c.duration // 60)|int }}:{{ '%02d'|format((c.duration % 60)|int) }}{% endif %} · {{ c.created_at|dt }}</span>
       </span>
       <span>
