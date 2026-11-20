@@ -466,7 +466,11 @@ def item_ready(cid: int, iid: int, user: User = Depends(require_user), db: Sessi
     if cp.item_source(cid, it) is not None:
         return Response(status_code=200, headers={"HX-Refresh": "true"})
     if not cp.is_fetching(cid, iid):
-        return Response('<div class="flash flash-error">Ophalen mislukt. Probeer het later opnieuw.</div>',
+        from html import escape
+
+        reason = cp.fetch_error(cid, iid) or "onbekende fout"
+        return Response(f'<div class="flash flash-error">Ophalen mislukt: {escape(reason)} '
+                        f'<a href="/compilations/{cid}/items/{iid}/edit">Opnieuw proberen</a></div>',
                         media_type="text/html", headers={"HX-Reswap": "outerHTML"})
     return Response(status_code=204)
 
