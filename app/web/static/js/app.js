@@ -479,3 +479,94 @@ document.addEventListener("click", function (e) {
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") document.querySelectorAll("details.usermenu[open]").forEach(function (d) { d.removeAttribute("open"); });
 });
+
+// ---------- compilatie (short): indeling per clip: vol met uitsnede, of facecam + gameplay ----------
+(function () {
+  var M = 36 / 1080, FW = 1 - 2 * M, FH = 1 - 2 * (36 / 1920);  // binnenvlak (fracties van 1080x1920)
+  function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+  function init(ed) {
+    var id = ed.getAttribute("data-lay");
+    var pick = ed.querySelector(".lay-pick"), img = pick.querySelector("img");
+    var sel = pick.querySelector(".lay-sel"), cropBox = pick.querySelector(".lay-crop");
+    var camIn = ed.querySelector('input[name="cam_' + id + '"]');
+    var slider = ed.querySelector('input[name="cropx_' + id + '"]');
+    var canvas = ed.querySelector("canvas"), ctx = canvas.getContext("2d");
+    function mode() { var r = ed.querySelector('input[name="layout_' + id + '"]:checked'); return r ? r.value : "fill"; }
+    function pos() { var r = ed.querySelector('input[name="campos_' + id + '"]:checked'); return r ? r.value : "bottom"; }
+    function box() {
+      var v = (camIn.value || "").split(",").map(parseFloat);
+      return v.length === 4 && v.every(function (x) { return !isNaN(x); }) && v[2] > 0.02 && v[3] > 0.02 ? v : null;
+    }
+    function srcAspect() { return img && img.naturalWidth ? img.naturalWidth / img.naturalHeight : 16 / 9; }
+    function camTopH(b) {  // hoogte van het facecam-vak als deel van het binnenvlak
+      if (!b) return 0.36;
+      var a = (b[2] * srcAspect()) / b[3];  // verhouding (b/h) van het kader in pixels
+      var h = (FW * 1080) / a / (FH * 1920);
+      return clamp(h, 0.28, 0.45);
+    }
+    function showSel(b) {
+      if (!b) { sel.hidden = true; return; }
+      sel.hidden = false;
+      sel.style.left = b[0] * 100 + "%"; sel.style.top = b[1] * 100 + "%";
+      sel.style.width = b[2] * 100 + "%"; sel.style.height = b[3] * 100 + "%";
+    }
+    function visibleW(targetAspect) {  // breedte (fractie van de bron) die zichtbaar is bij 'cover'
+      return clamp(targetAspect / srcAspect(), 0.05, 1);
+    }
+    function draw() {
+      var m = mode(), b = box(), gx = (parseFloat(slider.value) || 0) / 100;
+      ed.setAttribute("data-mode", m);
+      ed.querySelector("summary").textContent = "Indeling: " + (m === "split" ? "gestapeld (facecam " + (pos() === "top" ? "boven" : "onder") + ")" : "vol");
+      showSel(m === "split" ? b : null);
+      var W = canvas.width, H = canvas.height;
+      ctx.fillStyle = "#222"; ctx.fillRect(0, 0, W, H);
+      var ix = M * W, iy = (36 / 1920) * H, iw = FW * W, ih = FH * H;
+      var gameH = m === "split" ? ih * (1 - camTopH(b)) : ih;
+      var vw = visibleW((iw) / gameH);
+      cropBox.style.left = (1 - vw) * gx * 100 + "%"; cropBox.style.width = vw * 100 + "%";
+      if (!img || !img.complete || !img.naturalWidth) return;
+      var NW = img.naturalWidth, NH = img.naturalHeight;
+      function cover(sx, sy, sw, sh, dx, dy, dw, dh, fx) {  // bronvak 'cover' in doelvak, horizontaal op fx
+        var ta = dw / dh, sa = sw / sh;
+        if (sa > ta) { var nw = sh * ta; sx += (sw - nw) * fx; sw = nw; } else { var nh = sw / ta; sy += (sh - nh) / 2; sh = nh; }
+        ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+      }
+      if (m !== "split") { cover(0, 0, NW, NH, ix, iy, iw, ih, gx); return; }
+      var camH = ih - gameH, top = pos() === "top";
+      var camY = top ? iy : iy + gameH, gameY = top ? iy + camH : iy;
+      cover(0, 0, NW, NH, ix, gameY, iw, gameH, gx);
+      if (b) { cover(b[0] * NW, b[1] * NH, b[2] * NW, b[3] * NH, ix, camY, iw, camH, 0.5); }
+      else {
+        ctx.fillStyle = "#333"; ctx.fillRect(ix, camY, iw, camH);
+        ctx.fillStyle = "#bbb"; ctx.font = "10px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("facecam (auto)", W / 2, camY + camH / 2 + 3);
+      }
+    }
+    var start = null;
+    function at(e) {
+      var r = pick.getBoundingClientRect();
+      return { x: clamp((e.clientX - r.left) / r.width, 0, 1), y: clamp((e.clientY - r.top) / r.height, 0, 1) };
+    }
+    pick.addEventListener("pointerdown", function (e) {
+      if (mode() !== "split") return;
+      e.preventDefault(); start = at(e); pick.setPointerCapture(e.pointerId);
+    });
+    pick.addEventListener("pointermove", function (e) {
+      if (!start) return;
+      var p = at(e);
+      var b = [Math.min(start.x, p.x), Math.min(start.y, p.y), Math.abs(p.x - start.x), Math.abs(p.y - start.y)];
+      if (b[2] > 0.02 && b[3] > 0.02) camIn.value = b.map(function (v) { return v.toFixed(4); }).join(",");
+      draw();
+    });
+    pick.addEventListener("pointerup", function () { start = null; });
+    ed.addEventListener("change", draw);
+    ed.addEventListener("input", draw);
+    ed.querySelector("[data-lay-clear]").addEventListener("click", function () { camIn.value = ""; draw(); });
+    if (img) { if (img.complete) draw(); else img.addEventListener("load", draw); }
+    ed.addEventListener("toggle", draw);
+    draw();
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("details.lay-ed").forEach(init);
+  });
+})();

@@ -429,6 +429,11 @@ class CompilationItem(Base):
     trim_start: Mapped[float] = mapped_column(Float, default=0.0)
     trim_end: Mapped[float | None] = mapped_column(Float, nullable=True)  # None = tot het einde
     thumbnail_url: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # indeling in een short-top-lijst: fill (uitsnede, crop_x = positie) of split (facecam + gameplay)
+    layout: Mapped[str] = mapped_column(String(10), default="fill")
+    crop_x: Mapped[float] = mapped_column(Float, default=0.5)
+    cam_box: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "x,y,w,h" fracties; leeg = automatisch
+    cam_pos: Mapped[str] = mapped_column(String(8), default="bottom")  # top | bottom
 
     compilation: Mapped[Compilation] = relationship(back_populates="items")
 

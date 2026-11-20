@@ -215,7 +215,8 @@ def _wrap_words(words, font, max_w: int, draw) -> list[list[tuple[str, tuple]]]:
     return lines
 
 
-def short_overlay(path: Path, title: str, list_lines: list[tuple[int, str, str]], credit: str) -> None:
+def short_overlay(path: Path, title: str, list_lines: list[tuple[int, str, str]], credit: str,
+                  list_area: tuple[int, int] | None = None) -> None:
     """Tekstlaag (PNG met transparantie): titel bovenaan en links het genummerde lijstje.
 
     Grote witte letters met een dikke zwarte rand, zoals in populaire 'Ranking top 5'-shorts;
@@ -249,9 +250,11 @@ def short_overlay(path: Path, title: str, list_lines: list[tuple[int, str, str]]
     # lijstje links: nummer in medaillekleur, getoonde clips met hun titel
     if list_lines:
         n = len(list_lines)
-        top = max(y + 70, 330)
-        step = min(165, int((h * 0.62 - top) / max(1, n - 1))) if n > 1 else 0
+        lo, hi = list_area if list_area else (330, int(h * 0.62))
+        top = max(y + 70, lo)
+        step = min(165, int((hi - top) / max(1, n - 1))) if n > 1 else 0
         num_size = 84 if n <= 5 else (72 if n <= 7 else 60)
+        num_size = max(40, min(num_size, int(step * 0.62))) if n > 1 else num_size
         txt_size = int(num_size * 0.62)
         fn, ft = _font(num_size), _font(txt_size)
         for i, (rank, text, state) in enumerate(list_lines):
@@ -270,20 +273,61 @@ def short_overlay(path: Path, title: str, list_lines: list[tuple[int, str, str]]
     img.save(path)
 
 
+def short_split(src_w: int, src_h: int, cam: tuple[float, float, float, float], cam_pos: str,
+                game_x: float = 0.5) -> tuple[str, int]:
+    """Filter voor 'gestapeld' in een short (binnen de vervaagde rand): facecam en gameplay onder elkaar.
+
+    Geeft (filter van [fga] naar [fg], hoogte van het facecam-vak) terug.
+    """
+    fw, fh = SHORT_W - 2 * SHORT_MARGIN, SHORT_H - 2 * SHORT_MARGIN
+    x, y, cw, ch = (max(0.0, min(1.0, float(v))) for v in cam)
+    cx, cy = int(x * src_w) // 2 * 2, int(y * src_h) // 2 * 2
+    cwp, chp = max(16, int(cw * src_w) // 2 * 2), max(16, int(ch * src_h) // 2 * 2)
+    cwp, chp = min(cwp, src_w - cx), min(chp, src_h - cy)
+    top_h = int(max(0.28 * fh, min(0.45 * fh, fw * chp / cwp))) // 2 * 2
+    game_h = fh - top_h
+    gx = max(0.0, min(1.0, game_x))
+    parts = (
+        f"[fga]split=2[ca][ga];"
+        f"[ca]crop={cwp}:{chp}:{cx}:{cy},scale={fw}:{top_h}:force_original_aspect_ratio=increase,"
+        f"crop={fw}:{top_h},setsar=1[cam];"
+        f"[ga]scale={fw}:{game_h}:force_original_aspect_ratio=increase,"
+        f"crop={fw}:{game_h}:(iw-{fw})*{gx:.3f}:(ih-{game_h})/2,setsar=1[game];"
+    )
+    order = "[cam][game]" if cam_pos == "top" else "[game][cam]"
+    return parts + f"{order}vstack=inputs=2[fg]", top_h
+
+
 def short_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, title: str,
-                  list_lines: list[tuple[int, str, str]], credit: str, has_audio: bool, tag: str) -> None:
-    """Eén clip als staand 1080x1920-segment: de video vult het beeld (met een smalle vervaagde rand),
-    met daarover de titel en het genummerde lijstje."""
+                  list_lines: list[tuple[int, str, str]], credit: str, has_audio: bool, tag: str,
+                  layout: dict | None = None, src_size: tuple[int, int] | None = None) -> None:
+    """Eén clip als staand 1080x1920-segment met een smalle vervaagde rand, titel en genummerd lijstje.
+
+    layout: {'mode': 'fill', 'crop_x': 0..1} (uitsnede, positie links-rechts) of
+    {'mode': 'split', 'cam': (x,y,w,h), 'cam_pos': 'top'|'bottom', 'crop_x': ...} (facecam + gameplay).
+    """
     w, h = SHORT_W, SHORT_H
-    ov = cwd / f"{tag}_overlay.png"
-    short_overlay(ov, title, list_lines, credit)
+    lay = layout or {"mode": "fill", "crop_x": 0.5}
     fw, fh = w - 2 * SHORT_MARGIN, h - 2 * SHORT_MARGIN
+    gx = max(0.0, min(1.0, float(lay.get("crop_x", 0.5))))
+    list_area = None
+    if lay.get("mode") == "split" and lay.get("cam") and src_size:
+        fg, top_h = short_split(src_size[0], src_size[1], lay["cam"], lay.get("cam_pos", "bottom"), gx)
+        if lay.get("cam_pos") == "top":
+            list_area = (SHORT_MARGIN + top_h + 30, int(h * 0.82))
+        else:
+            list_area = (330, SHORT_MARGIN + (fh - top_h) - 90)
+    else:
+        fg = (f"[fga]scale={fw}:{fh}:force_original_aspect_ratio=increase,"
+              f"crop={fw}:{fh}:(iw-{fw})*{gx:.3f}:(ih-{fh})/2,setsar=1[fg]")
+    ov = cwd / f"{tag}_overlay.png"
+    short_overlay(ov, title, list_lines, credit, list_area)
     fo = max(0.0, dur - 0.25)
     vf = (
         "[0:v]split=2[bga][fga];"
         f"[bga]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,"
         "boxblur=24:2,eq=brightness=-0.1:saturation=0.8[bg];"
-        f"[fga]scale={fw}:{fh}:force_original_aspect_ratio=increase,crop={fw}:{fh},setsar=1[fg];"
+        + fg + ";"
         f"[bg][fg]overlay={SHORT_MARGIN}:{SHORT_MARGIN}[base];"
         f"[base][2:v]overlay=0:0,fps={FPS},format=yuv420p,"
         f"fade=t=in:st=0:d=0.2,fade=t=out:st={fo:.2f}:d=0.25[v]"
@@ -298,6 +342,30 @@ def short_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, 
            "-filter_complex", vf + ";" + af, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.3f}",
            *ENC, str(out.resolve())]
     _run(cmd, cwd=cwd)
+
+
+def item_layout(it: CompilationItem, src: Path, info: dict, start: float, end: float) -> tuple[dict, str | None]:
+    """Indeling voor een clip in een short. Bij 'gestapeld' zonder eigen kader: facecam automatisch zoeken."""
+    gx = it.crop_x if it.crop_x is not None else 0.5
+    if (it.layout or "fill") != "split":
+        return {"mode": "fill", "crop_x": gx}, None
+    from app.pipeline.facecam import parse_box
+
+    cam = parse_box(it.cam_box) if it.cam_box else None
+    note = None
+    if cam is None:
+        from app.pipeline import framing
+
+        try:
+            fr = framing.choose_framing(src, info["width"], info["height"], start, end, force_mode="split")
+            if fr.mode == "split" and fr.layout:
+                cam = tuple(fr.layout["cam"])
+        except Exception:  # noqa: BLE001
+            cam = None
+        if cam is None:
+            return {"mode": "fill", "crop_x": gx}, "geen facecam gevonden: gevuld weergegeven"
+        note = "facecam automatisch gevonden"
+    return {"mode": "split", "cam": cam, "cam_pos": it.cam_pos or "bottom", "crop_x": gx}, note
 
 
 def short_list(ranking: str, items: list[CompilationItem], k: int) -> list[tuple[int, str, str]]:
@@ -517,9 +585,11 @@ def render_compilation(db: Session, cid: int) -> None:
         seg = work / f"seg_{k:02d}.mp4"
         credit = f"twitch.tv/{it.channel_login}" if it.channel_login else it.streamer
         if short:
+            lay, _note = item_layout(it, src, info, start, start + dur)
             short_segment(src, start, dur, seg, work, title=comp.title or "Top clips",
                           list_lines=short_list(comp.ranking, items, k), credit=credit,
-                          has_audio=info["has_audio"], tag=f"c{k:02d}")
+                          has_audio=info["has_audio"], tag=f"c{k:02d}",
+                          layout=lay, src_size=(info["width"], info["height"]))
         else:
             clip_segment(src, start, dur, seg, work, rank=rank, title=it.title, credit=credit,
                          has_audio=info["has_audio"], tag=f"c{k:02d}")
