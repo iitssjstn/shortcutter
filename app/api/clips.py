@@ -20,7 +20,6 @@ from app.estimation.features import compute_features
 from app.estimation.service import clip_estimate
 from app.pipeline import captions, framing
 from app.pipeline.copywriting import normalize_hashtags
-from app.pipeline.errors import LLMError
 from app.pipeline.facecam import format_box, parse_box
 from app.pipeline.run import ACTIVE_STATUSES, load_transcript, write_clips_json
 from app.pipeline.transcribe import all_words

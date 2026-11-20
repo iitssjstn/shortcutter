@@ -421,3 +421,30 @@ def test_short_item_editor(app, admin_client, fake, sample_video, monkeypatch):
     other = make_client(app)
     login(other, "eve")
     assert other.get(f"/compilations/{cid}/items/{ids[0]}/edit").status_code == 404
+
+
+def test_compilation_text_gets_trends_and_tags(admin_client, monkeypatch):
+    from types import SimpleNamespace as N
+
+    from app.pipeline import pick
+
+    seen = {}
+    monkeypatch.setattr("app.core.keys.load_llm_config", lambda db, task: pick.LLMConfig("u", "m", "k"))
+    monkeypatch.setattr(cp, "comp_trends", lambda db, comp: "WAT NU WERKT OP YOUTUBE voor 'gta'")
+
+    def fake_chat(cfg, messages, **kw):
+        seen["p"] = messages[1]["content"]
+        return {"title": "T", "description": "D", "hashtags": ["#gta"], "tags": ["gta 6", "speed"]}
+
+    monkeypatch.setattr(pick, "chat_json", fake_chat)
+    from tests.conftest import user_id
+
+    items = [N(title="a", streamer="Speed", game="GTA", views=10, included=True),
+             N(title="b", streamer="Speed", game="GTA", views=20, included=True)]
+    comp = N(owner_id=user_id("admin"), included=items, title="Best", period="week", ranking="countdown",
+             format="landscape", id=1)
+    db = new_session()
+    title, intro, tags, yt_tags = cp.generate_text(db, comp)
+    db.close()
+    assert "WAT NU WERKT" in seen["p"] and '"tags"' in seen["p"]
+    assert yt_tags == "gta 6, speed" and title == "T"

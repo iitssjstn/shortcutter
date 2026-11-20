@@ -359,6 +359,7 @@ def ensure_source(cid: int, it: CompilationItem) -> Path:
 
 
 _fetching: set[tuple[int, int]] = set()
+_fetch_errors: dict[tuple[int, int], str] = {}
 _fetch_lock = threading.Lock()
 
 
@@ -368,6 +369,7 @@ def fetch_in_background(cid: int, iid: int) -> None:
         if (cid, iid) in _fetching:
             return
         _fetching.add((cid, iid))
+        _fetch_errors.pop((cid, iid), None)
 
     def work():
         from app.core.db import new_session
@@ -377,14 +379,22 @@ def fetch_in_background(cid: int, iid: int) -> None:
             it = db.get(CompilationItem, iid)
             if it is not None:
                 ensure_source(cid, it)
-        except Exception:  # noqa: BLE001
-            log.exception("Clip %s voor de editor ophalen mislukt", iid)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Clip %s voor de editor ophalen mislukt: %s", iid, type(exc).__name__)
+            known = isinstance(exc, (DownloadBlocked, DownloadFailed))
+            with _fetch_lock:
+                _fetch_errors[(cid, iid)] = str(exc)[:300] if known else f"Onverwachte fout ({type(exc).__name__})."
         finally:
             db.close()
             with _fetch_lock:
                 _fetching.discard((cid, iid))
 
     threading.Thread(target=work, daemon=True, name=f"fetch-{iid}").start()
+
+
+def fetch_error(cid: int, iid: int) -> str | None:
+    with _fetch_lock:
+        return _fetch_errors.get((cid, iid))
 
 
 def is_fetching(cid: int, iid: int) -> bool:
@@ -588,7 +598,8 @@ def generate_text(db: Session, comp: Compilation) -> tuple[str, str, str, str]:
             + ("- hashtags: 3-5 relevant hashtags.\n" if short else "- hashtags: 3-5 relevant hashtags (no #shorts).\n")
             + "- tags: 8-15 hidden YouTube tags (no #): game, streamer names (incl. common spellings), what happens, "
             "search terms people really use.\n"
-            + 'JSON: {"title": "...", "description": "...", "hashtags": ["#..."]}\n\nClips in order:\n' + lines)},
+            + 'JSON: {"title": "...", "description": "...", "hashtags": ["#..."], "tags": ["..."]}\n\n'
+            + (trend + "\n\n" if trend else "") + "Clips in order:\n" + lines)},
     ]
     try:
         out = pick.chat_json(cfg, messages, retries=2, timeout=60.0)
@@ -739,12 +750,13 @@ def run_next_render(db: Session) -> bool:
     comp = _claim(db, "status", "queued", "rendering")
     if comp is None:
         return False
-    log.info("Compilatie %s renderen", comp.id)
+    cid = comp.id
+    log.info("Compilatie %s renderen", cid)
     try:
-        render_compilation(db, comp.id)
+        render_compilation(db, cid)
     except Exception as exc:  # noqa: BLE001
         db.rollback()
-        comp = db.get(Compilation, comp.id)
+        comp = db.get(Compilation, cid)
         if comp is not None:
             comp.status = "failed"
             known = isinstance(exc, (RenderError, DownloadBlocked, DownloadFailed))
@@ -752,7 +764,7 @@ def run_next_render(db: Session) -> bool:
             comp.stage_message = "Mislukt"
             db.commit()
         log.exception("Compilatie mislukt")
-    _notify_comp(db, comp.id, render=True)
+    _notify_comp(db, cid, render=True)
     return True
 
 
@@ -785,17 +797,18 @@ def run_next_upload(db: Session) -> bool:
     comp = _claim(db, "yt_status", "queued", "uploading")
     if comp is None:
         return False
+    cid = comp.id
     try:
-        run_upload(db, comp.id)
+        run_upload(db, cid)
     except Exception as exc:  # noqa: BLE001
         db.rollback()
-        comp = db.get(Compilation, comp.id)
+        comp = db.get(Compilation, cid)
         if comp is not None:
             comp.yt_status = "failed"
             comp.yt_error = f"Onverwachte fout ({type(exc).__name__})."
             db.commit()
         log.exception("Compilatie-upload mislukt")
-    _notify_comp(db, comp.id, render=False)
+    _notify_comp(db, cid, render=False)
     return True
 
 
