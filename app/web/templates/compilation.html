@@ -108,32 +108,10 @@
         <button class="btn btn-sm btn-danger" name="remove" value="{{ it.id }}" title="Uit de lijst halen">✕</button>
       </span>
       {% if comp.format == 'short' %}
-      <details class="lay-ed" data-lay="{{ it.id }}" {% if open_item == it.id %}open{% endif %}>
-        <summary>Indeling: {{ 'gestapeld (facecam ' ~ ('boven' if it.cam_pos == 'top' else 'onder') ~ ')' if it.layout == 'split' else 'vol' }}</summary>
-        <div class="lay-body">
-          <div class="lay-left">
-            <div class="lay-modes">
-              <label><input type="radio" name="layout_{{ it.id }}" value="fill" {% if it.layout != 'split' %}checked{% endif %}> Vol</label>
-              <label><input type="radio" name="layout_{{ it.id }}" value="split" {% if it.layout == 'split' %}checked{% endif %}> Gestapeld</label>
-              <label class="lay-pos"><input type="radio" name="campos_{{ it.id }}" value="bottom" {% if it.cam_pos != 'top' %}checked{% endif %}> Facecam onder</label>
-              <label class="lay-pos"><input type="radio" name="campos_{{ it.id }}" value="top" {% if it.cam_pos == 'top' %}checked{% endif %}> Facecam boven</label>
-            </div>
-            <div class="lay-pick" data-box="{{ it.cam_box or '' }}">
-              {% if it.thumbnail_url %}<img src="{{ it.thumbnail_url }}" alt="Stilstaand beeld van de clip" draggable="false">{% else %}<div class="lay-noimg">Geen voorbeeldbeeld</div>{% endif %}
-              <div class="lay-sel" hidden></div>
-              <div class="lay-crop"></div>
-            </div>
-            <p class="hint lay-hint-split">Sleep een kader om de facecam. Leeg laten = automatisch zoeken bij het renderen.</p>
-            <label class="lay-slider">Uitsnede gameplay (links ↔ rechts)<input type="range" name="cropx_{{ it.id }}" min="0" max="100" step="1" value="{{ ((it.crop_x if it.crop_x is not none else 0.5) * 100)|round|int }}"></label>
-            <input type="hidden" name="cam_{{ it.id }}" value="{{ it.cam_box or '' }}">
-            <div class="lay-btns">
-              <button class="btn btn-sm" type="button" data-lay-clear>Kader wissen</button>
-              <button class="btn btn-sm" type="submit" name="apply_layout" value="{{ it.id }}">Op alle clips toepassen</button>
-            </div>
-          </div>
-          <div class="lay-prev"><canvas width="108" height="192" aria-label="Voorbeeld staand"></canvas><span class="hint">voorbeeld</span></div>
-        </div>
-      </details>
+      <div class="comp-edit-row">
+        <a class="btn btn-sm" href="/compilations/{{ comp.id }}/items/{{ it.id }}/edit">✎ Bewerken</a>
+        <span class="muted">Indeling: {% if it.layout_json %}{{ 'gestapeld (eigen)' if '"split"' in it.layout_json else 'vol (eigen uitsnede)' }}{% elif it.layout == 'split' %}{{ 'gestapeld' if it.cam_box else 'automatisch' }}{% else %}vol{% endif %}</span>
+      </div>
       {% endif %}
     </li>
     {% endfor %}

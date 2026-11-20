@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Clip bewerken{% endblock %}
+{% block content %}
+<p><a href="/compilations/{{ comp.id }}#item-{{ it.id }}" class="muted">← Terug naar de compilatie</a></p>
+<div class="page-head">
+  <div style="min-width:0">
+    <h1>Indeling bewerken</h1>
+    <p class="muted">{{ it.title }} · {{ it.streamer }}{% if not loading %} · {{ start|ts }} – {{ end|ts }} ({{ '%.0f'|format(dur) }} s){% endif %}</p>
+  </div>
+</div>
+
+{% if loading %}
+<div class="card" hx-get="/compilations/{{ comp.id }}/items/{{ it.id }}/ready" hx-trigger="load delay:1s, every 2s" hx-swap="outerHTML">
+  <strong>Clip wordt opgehaald…</strong>
+  <p class="muted" style="margin:.3rem 0 0">Dit duurt meestal een paar seconden. De editor opent vanzelf.</p>
+</div>
+{% else %}
+<form method="post" action="/compilations/{{ comp.id }}/items/{{ it.id }}/editor" id="clip-editor">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="layout_json" id="layout-json" value="{{ layout_json }}">
+  <input type="hidden" name="layout_mode" id="layout-mode" value="{{ layout_mode }}">
+
+  <section class="card ed-card">
+    <div class="ed-panes">
+      <div class="ed-land">
+        <div class="ed-label">Liggende versie <span class="muted">· sleep de box, of klik op het beeld om hem daarheen te verplaatsen</span></div>
+        <div class="ed-pick" id="ed-pick">
+          <button type="button" class="ed-pick-btn cam" data-pick="cam">Facecam</button>
+          <button type="button" class="ed-pick-btn game" data-pick="game">Gameplay</button>
+        </div>
+        <div class="ed-stage" id="ed-stage" data-src-w="{{ src_w }}" data-src-h="{{ src_h }}" data-facecam=""
+             data-start="{{ start }}" data-end="{{ end }}">
+          <video id="ed-video" src="/compilations/{{ comp.id }}/items/{{ it.id }}/source#t={{ start }}" preload="auto" muted playsinline></video>
+          <div class="ed-box cam" data-k="cam"><span class="ed-tag">facecam</span></div>
+          <div class="ed-box game" data-k="game"><span class="ed-tag">gameplay</span></div>
+          <div class="ed-box crop" data-k="rect"><span class="ed-tag">uitsnede</span></div>
+          <div class="ed-auto-note">Automatisch: de facecam wordt bij het renderen gezocht (anders gevuld). Kies <strong>Vol</strong> of <strong>Gestapeld</strong> om het zelf aan te passen.</div>
+        </div>
+        <div class="ed-sizebar" id="ed-sizebar">
+          <label for="ed-size">Grootte <span class="muted" id="ed-size-name"></span></label>
+          <input type="range" id="ed-size" min="10" max="100" step="1" value="50">
+        </div>
+      </div>
+
+      <div class="ed-port">
+        <div class="ed-label">Staande versie <span class="muted">· met titel en lijstje</span></div>
+        <div class="ed-preview-wrap" id="ed-preview-wrap">
+          <canvas id="ed-preview" width="360" height="640" aria-label="Voorbeeld van de short"></canvas>
+          <img id="ed-overlay" class="ed-overlay" data-src="/compilations/{{ comp.id }}/items/{{ it.id }}/overlay.png" alt="">
+          <div class="ed-divider" id="ed-divider" title="Sleep om de verhouding facecam/gameplay te wijzigen"><span></span></div>
+        </div>
+        <div class="ed-modes">
+          <button type="button" class="ed-mode" data-mode="crop"><svg viewBox="0 0 12 18" width="11" height="16" aria-hidden="true"><rect x="1" y="1" width="10" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg> Vol</button>
+          <button type="button" class="ed-mode" data-mode="split"><svg viewBox="0 0 12 18" width="11" height="16" aria-hidden="true"><rect x="1" y="1" width="10" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="1" y1="7" x2="11" y2="7" stroke="currentColor" stroke-width="1.6"/></svg> Gestapeld</button>
+          <button type="button" class="ed-mode ed-mode-auto" data-mode="auto">Automatisch</button>
+        </div>
+        <label class="check-line ed-apply-all"><input type="checkbox" name="apply_all" value="1"> Deze indeling voor alle clips van deze compilatie</label>
+      </div>
+    </div>
+
+    <div class="ed-timeline">
+      <input type="range" id="ed-seek" min="0" max="{{ '%.2f'|format(dur) }}" step="0.01" value="0" aria-label="Positie in de clip">
+      <div class="ed-controls">
+        <div class="ed-player">
+          <button type="button" class="btn btn-sm" id="ed-play" aria-label="Afspelen">▶</button>
+          <button type="button" class="btn btn-sm" id="ed-mute" aria-label="Geluid aan">🔇</button>
+          <span class="ed-time" id="ed-time">0:00 / {{ dur|ts }}</span>
+        </div>
+        <div class="ed-actions">
+          <a class="btn" href="/compilations/{{ comp.id }}#item-{{ it.id }}">Annuleren</a>
+          <button class="btn btn-primary" type="submit">Opslaan</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <p class="hint">Begin en eind van de clip pas je aan in de lijst van de compilatie. Na opslaan: <strong>Opnieuw renderen</strong> om het resultaat te zien.</p>
+</form>
+{% endif %}
+{% endblock %}

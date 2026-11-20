@@ -434,6 +434,7 @@ class CompilationItem(Base):
     crop_x: Mapped[float] = mapped_column(Float, default=0.5)
     cam_box: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "x,y,w,h" fracties; leeg = automatisch
     cam_pos: Mapped[str] = mapped_column(String(8), default="bottom")  # top | bottom
+    layout_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # eigen indeling uit de editor
 
     compilation: Mapped[Compilation] = relationship(back_populates="items")
 

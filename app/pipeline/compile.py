@@ -311,7 +311,9 @@ def short_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, 
     fw, fh = w - 2 * SHORT_MARGIN, h - 2 * SHORT_MARGIN
     gx = max(0.0, min(1.0, float(lay.get("crop_x", 0.5))))
     list_area = None
-    if lay.get("mode") == "split" and lay.get("cam") and src_size:
+    if lay.get("mode") == "custom" and src_size:
+        fg, list_area = custom_short_filter(src_size[0], src_size[1], lay["layout"])
+    elif lay.get("mode") == "split" and lay.get("cam") and src_size:
         fg, top_h = short_split(src_size[0], src_size[1], lay["cam"], lay.get("cam_pos", "bottom"), gx)
         if lay.get("cam_pos") == "top":
             list_area = (SHORT_MARGIN + top_h + 30, int(h * 0.82))
@@ -344,8 +346,88 @@ def short_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, 
     _run(cmd, cwd=cwd)
 
 
+def item_source(cid: int, it: CompilationItem) -> Path | None:
+    """Al gedownload bronbestand van deze clip (of None)."""
+    d = comp_dir(cid) / "clips" / it.slug
+    files = [p for p in d.glob("source.*") if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov")] if d.is_dir() else []
+    return files[0] if files else None
+
+
+def ensure_source(cid: int, it: CompilationItem) -> Path:
+    """Bronbestand van deze clip, zo nodig eerst downloaden (blijft bewaard voor de editor en opnieuw renderen)."""
+    return item_source(cid, it) or download(it.clip_url, comp_dir(cid) / "clips" / it.slug)[0]
+
+
+_fetching: set[tuple[int, int]] = set()
+_fetch_lock = threading.Lock()
+
+
+def fetch_in_background(cid: int, iid: int) -> None:
+    """Download de clip voor de editor op de achtergrond (één keer tegelijk per clip)."""
+    with _fetch_lock:
+        if (cid, iid) in _fetching:
+            return
+        _fetching.add((cid, iid))
+
+    def work():
+        from app.core.db import new_session
+
+        db = new_session()
+        try:
+            it = db.get(CompilationItem, iid)
+            if it is not None:
+                ensure_source(cid, it)
+        except Exception:  # noqa: BLE001
+            log.exception("Clip %s voor de editor ophalen mislukt", iid)
+        finally:
+            db.close()
+            with _fetch_lock:
+                _fetching.discard((cid, iid))
+
+    threading.Thread(target=work, daemon=True, name=f"fetch-{iid}").start()
+
+
+def is_fetching(cid: int, iid: int) -> bool:
+    with _fetch_lock:
+        return (cid, iid) in _fetching
+
+
+def custom_short_filter(src_w: int, src_h: int, layout: dict) -> tuple[str, tuple[int, int] | None]:
+    """Eigen indeling uit de editor ({'type': 'crop'|'split', ...}) als filter naar [fg] binnen de rand."""
+    fw, fh = SHORT_W - 2 * SHORT_MARGIN, SHORT_H - 2 * SHORT_MARGIN
+
+    def px(r):
+        x, y, w, h = (max(0.0, min(1.0, float(v))) for v in r)
+        cx, cy = int(x * src_w) // 2 * 2, int(y * src_h) // 2 * 2
+        cw = max(16, min(src_w - cx, int(w * src_w)) // 2 * 2)
+        ch = max(16, min(src_h - cy, int(h * src_h)) // 2 * 2)
+        return cw, ch, cx, cy
+
+    def fit(r, ow, oh, tag_in, tag_out):
+        cw, ch, cx, cy = px(r)
+        return (f"[{tag_in}]crop={cw}:{ch}:{cx}:{cy},scale={ow}:{oh}:force_original_aspect_ratio=increase,"
+                f"crop={ow}:{oh},setsar=1[{tag_out}]")
+
+    if layout.get("type") == "split":
+        top_h = int(fh * max(0.2, min(0.6, float(layout.get("top", 0.35))))) // 2 * 2
+        f = ("[fga]split=2[ca][ga];" + fit(layout["cam"], fw, top_h, "ca", "cam") + ";"
+             + fit(layout["game"], fw, fh - top_h, "ga", "game") + ";[cam][game]vstack=inputs=2[fg]")
+        return f, (SHORT_MARGIN + top_h + 30, int(SHORT_H * 0.82))
+    return fit(layout["rect"], fw, fh, "fga", "fg"), None
+
+
 def item_layout(it: CompilationItem, src: Path, info: dict, start: float, end: float) -> tuple[dict, str | None]:
     """Indeling voor een clip in een short. Bij 'gestapeld' zonder eigen kader: facecam automatisch zoeken."""
+    from app.pipeline import framing
+
+    custom = None
+    if getattr(it, "layout_json", None):
+        try:
+            custom = framing.validate_layout(json.loads(it.layout_json))
+        except ValueError:
+            custom = None
+    if custom is not None:
+        return {"mode": "custom", "layout": custom}, None
     gx = it.crop_x if it.crop_x is not None else 0.5
     if (it.layout or "fill") != "split":
         return {"mode": "fill", "crop_x": gx}, None
@@ -550,9 +632,7 @@ def render_compilation(db: Session, cid: int) -> None:
     sources: dict[int, tuple[Path, dict]] = {}
     for k, it in enumerate(items):
         _set(db, comp, int(5 + 40 * k / n), f"Clip {k + 1} van {n} downloaden")
-        d = base / "clips" / it.slug
-        existing = [p for p in d.glob("source.*")] if d.is_dir() else []
-        path = existing[0] if existing else download(it.clip_url, d)[0]
+        path = ensure_source(cid, it)
         info = media.probe(path)
         if not it.duration:
             it.duration = info["duration"]

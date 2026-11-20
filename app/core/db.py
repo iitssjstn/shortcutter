@@ -63,6 +63,7 @@ _ADDED_COLUMNS = [
     ("compilation_items", "crop_x", "FLOAT NOT NULL DEFAULT 0.5"),
     ("compilation_items", "cam_box", "VARCHAR(64)"),
     ("compilation_items", "cam_pos", "VARCHAR(8) NOT NULL DEFAULT 'bottom'"),
+    ("compilation_items", "layout_json", "TEXT"),
     ("user_settings", "safe_mode", "BOOLEAN NOT NULL DEFAULT 0"),
     ("user_settings", "safe_visual", "BOOLEAN NOT NULL DEFAULT 1"),
     ("clips", "notified_at", "DATETIME"),

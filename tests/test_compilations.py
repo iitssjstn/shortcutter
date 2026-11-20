@@ -331,7 +331,7 @@ def test_short_item_layout(admin_client, fake, sample_video, monkeypatch):
     ids = [i.id for i in db.get(Compilation, cid).items]
     db.close()
     page = c.get(f"/compilations/{cid}").text
-    assert 'class="lay-ed"' in page and "Facecam onder" in page
+    assert f'/compilations/{cid}/items/{ids[0]}/edit' in page and "✎ Bewerken" in page
     form = {"title": "Top", "ranking": "countdown"}
     for i in ids:
         form.update({f"inc_{i}": "1", f"start_{i}": "0", f"end_{i}": "", f"layout_{i}": "fill", f"cropx_{i}": "50",
@@ -363,3 +363,61 @@ def test_short_item_layout(admin_client, fake, sample_video, monkeypatch):
     assert lay["mode"] == "fill" and "geen facecam" in note
     assert cp.item_layout(N(layout="fill", cam_box=None, cam_pos="bottom", crop_x=0.1), sample_video, {}, 0, 3)[0] == \
         {"mode": "fill", "crop_x": 0.1}
+
+
+
+def test_short_item_editor(app, admin_client, fake, sample_video, monkeypatch):
+    import json as _json
+
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    r = c.post("/compilations", data={"channel_ids": [str(ch.id)], "count": "5", "format": "short"})
+    cid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = new_session()
+    ids = [i.id for i in db.get(Compilation, cid).items]
+    db.close()
+    monkeypatch.setattr(cp, "download", _fake_download(sample_video))
+    # nog niet opgehaald: laadpagina, daarna de editor
+    page = c.get(f"/compilations/{cid}/items/{ids[0]}/edit").text
+    assert "Clip wordt opgehaald" in page or "ed-stage" in page
+    import time
+    for _ in range(100):
+        if c.get(f"/compilations/{cid}/items/{ids[0]}/ready").status_code == 200:
+            break
+        time.sleep(0.1)
+    page = c.get(f"/compilations/{cid}/items/{ids[0]}/edit").text
+    assert 'id="ed-stage"' in page and 'data-src-w="1280"' in page and "ed-overlay" in page
+    assert 'id="layout-mode" value="crop"' in page  # startpunt: de huidige uitsnede
+    assert c.get(f"/compilations/{cid}/items/{ids[0]}/source").status_code == 200
+    ov = c.get(f"/compilations/{cid}/items/{ids[0]}/overlay.png?top=0.35")
+    assert ov.status_code == 200 and ov.content[:4] == b"\x89PNG"
+    # eigen gestapelde indeling opslaan, voor alle clips
+    lay = {"type": "split", "cam": [0.0, 0.0, 0.3, 0.3], "game": [0.3, 0.0, 0.4, 1.0], "top": 0.35}
+    r = c.post(f"/compilations/{cid}/items/{ids[0]}/editor",
+               data={"layout_mode": "split", "layout_json": _json.dumps(lay), "apply_all": "1"})
+    assert r.status_code == 303
+    db = new_session()
+    assert all(_json.loads(i.layout_json)["type"] == "split" for i in db.get(Compilation, cid).items)
+    db.close()
+    filt, area = cp.custom_short_filter(1280, 720, lay)
+    assert "vstack" in filt and area[0] > cp.SHORT_MARGIN
+    # renderen met de eigen indeling
+    assert c.post(f"/compilations/{cid}/render").status_code == 303
+    assert run_compilation_once() is True
+    db = new_session()
+    comp = db.get(Compilation, cid)
+    assert comp.status == "done", comp.error
+    db.close()
+    # automatisch: eigen indeling weg, facecam zoeken
+    c.post(f"/compilations/{cid}/items/{ids[1]}/editor", data={"layout_mode": "auto"})
+    db = new_session()
+    it = next(i for i in db.get(Compilation, cid).items if i.id == ids[1])
+    assert it.layout_json is None and it.layout == "split" and it.cam_box is None
+    db.close()
+    # ander zijn clip: niet bereikbaar
+    from tests.conftest import create_user, login, make_client
+    create_user("eve")
+    other = make_client(app)
+    login(other, "eve")
+    assert other.get(f"/compilations/{cid}/items/{ids[0]}/edit").status_code == 404
