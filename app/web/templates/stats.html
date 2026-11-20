@@ -66,6 +66,45 @@
   {% endif %}
 </section>
 
+<section class="card" id="verspreiding">
+  <h2>Waarom wel of niet verspreid?</h2>
+  {% if not yt_connected %}
+  <p class="muted">Koppel je YouTube-kanaal bij <a href="/account#youtube">Mijn account</a> om per short te zien hoe hij verspreid wordt.</p>
+  {% elif not yt_analytics %}
+  <div class="flash flash-warn" style="margin:0">Voor deze cijfers is één extra leesrecht nodig (YouTube Analytics). <a href="/youtube/connect">Koppel je kanaal opnieuw</a> en sta het toe; je uploads en instellingen blijven gewoon staan.</div>
+  {% elif ana.n == 0 %}
+  <p class="muted">Nog geen shorts met genoeg weergaven (min. 20). Klik op "Views nu ophalen" hierboven, of wacht tot de volgende automatische ronde.</p>
+  {% else %}
+  <div class="stats-row">
+    <div class="stat"><div class="k">Uit de Shorts-feed</div><div class="v">{{ (ana.feed * 100)|round|int if ana.feed is not none else '–' }}%</div></div>
+    <div class="stat"><div class="k">Kijkt nog na 3 s</div><div class="v">{{ ([ana.hook, 1]|min * 100)|round|int if ana.hook is not none else '–' }}%</div></div>
+    <div class="stat"><div class="k">Gem. bekeken</div><div class="v">{{ ana.pct|round|int if ana.pct is not none else '–' }}%</div></div>
+  </div>
+  <ul class="ana-tips">
+    {% if ana.low_feed %}<li><strong>{{ ana.low_feed }} van {{ ana.n }}</strong> shorts zijn nauwelijks in de Shorts-feed getest. Dat wijst meestal op hergebruikte content (dezelfde clip staat al op veel kanalen) of een te weinig eigen inbreng. Voeg iets eigens toe (tekst, reactie, ranglijst) en kies clips die nog niet overal staan.</li>{% endif %}
+    {% if ana.weak_hook %}<li><strong>{{ ana.weak_hook }} van {{ ana.n }}</strong> verliezen veel kijkers in de eerste seconden. Begin direct bij de actie, gebruik de teaser vooraan en een tekst die nieuwsgierig maakt.</li>{% endif %}
+    {% if ana.drop_mid %}<li><strong>{{ ana.drop_mid }} van {{ ana.n }}</strong> worden gemiddeld minder dan 60% bekeken. Maak ze korter of laat ze eindigen op de clou.</li>{% endif %}
+    {% if not ana.low_feed and not ana.weak_hook and not ana.drop_mid %}<li>Geen duidelijke zwakke plek. Blijf consistent posten; groei komt vaak pas na enkele weken.</li>{% endif %}
+  </ul>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Short</th><th class="num">Views</th><th class="num">Shorts-feed</th><th class="num">Na 3 s</th><th class="num">Gem. bekeken</th><th>Diagnose</th></tr></thead>
+    <tbody>
+    {% for c in posted_shown if c.analytics_at %}
+      <tr>
+        <td><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.title|truncate(45) }}</a></td>
+        <td class="num">{{ fmt_views(c.actual_views) if c.actual_views is not none else '–' }}</td>
+        <td class="num">{{ (c.shorts_feed_share * 100)|round|int ~ '%' if c.shorts_feed_share is not none else '–' }}</td>
+        <td class="num">{{ ([c.hook_retention, 1]|min * 100)|round|int ~ '%' if c.hook_retention is not none else '–' }}</td>
+        <td class="num">{{ c.avg_view_pct|round|int ~ '%' if c.avg_view_pct is not none else '–' }}</td>
+        <td>{% for kind, text in diagnose.get(c.id, []) %}<span class="badge {{ 'badge-ok' if kind == 'ok' else ('badge-warn' if kind == 'warn' else '') }}">{{ text }}</span> {% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="hint">"Na 3 s" is het deel van de kijkers dat na ±3 seconden nog kijkt (benadering van 'gekozen om te bekijken'). Boven 100% bij "gem. bekeken" betekent herbekeken. Bron: YouTube Analytics, wordt mee opgehaald met de views.</p>
+  {% endif %}
+</section>
+
 <section class="card" id="geposte">
   <h2>Geposte clips</h2>
   {% if posted %}

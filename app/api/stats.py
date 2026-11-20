@@ -129,8 +129,22 @@ def stats_page(request: Request, all: int = 0, user: User = Depends(require_user
             "min_median": MIN_POINTS_MEDIAN,
             "min_regression": MIN_POINTS_REGRESSION,
             "insights": _insights_ctx(db, user.id),
+            **_analytics_ctx(db, user.id, posted),
         },
     )
+
+
+def _analytics_ctx(db: Session, user_id: int, posted: list) -> dict:
+    from app.core.models import YoutubeAccount
+    from app.estimation import analytics
+
+    acc = db.scalar(select(YoutubeAccount).where(YoutubeAccount.user_id == user_id))
+    return {
+        "yt_connected": acc is not None,
+        "yt_analytics": bool(acc and acc.has_analytics),
+        "ana": analytics.summary(posted),
+        "diagnose": {c.id: analytics.diagnose(c) for c in posted},
+    }
 
 
 def _insights_ctx(db: Session, user_id: int) -> dict:

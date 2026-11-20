@@ -493,3 +493,5 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
 }
 .ed-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .comp-edit-row { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .6rem; align-items: center; font-size: .82rem; border-top: 1px dashed var(--border); padding-top: .45rem; }
+.ana-tips { margin: .6rem 0 .8rem; padding-left: 1.1rem; display: grid; gap: .35rem; font-size: .9rem; }
+.ana-tips li { line-height: 1.45; }

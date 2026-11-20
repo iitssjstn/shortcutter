@@ -87,6 +87,13 @@ def sync_user_stats(db: Session, user_id: int) -> int:
     us = user_settings(db, user_id)
     us.stats_synced_at = utcnow()
     db.commit()
+    try:  # uitgebreide cijfers (Shorts-feed, kijkers na 3 s) als de koppeling dat recht heeft
+        from app.estimation import analytics
+
+        analytics.sync(db, user_id)
+    except Exception as exc:  # noqa: BLE001 - analytics zijn een extra
+        db.rollback()
+        log.warning("YouTube Analytics ophalen mislukt: %s", type(exc).__name__)
     return updated
 
 
@@ -102,6 +109,12 @@ def _line(c: Clip) -> str:
     bits = [f"{c.actual_views} views"]
     if c.likes is not None:
         bits.append(f"{c.likes} likes")
+    if c.hook_retention is not None:
+        bits.append(f"{min(100, round(c.hook_retention * 100))}% kijkt nog na 3 s")
+    if c.avg_view_pct is not None:
+        bits.append(f"gem. {c.avg_view_pct:.0f}% bekeken")
+    if c.shorts_feed_share is not None:
+        bits.append(f"{round(c.shorts_feed_share * 100)}% uit Shorts-feed")
     bits += [f"titel: {c.title[:90]}"]
     if c.hook:
         bits.append(f"hook: {c.hook[:90]}")
@@ -152,6 +165,7 @@ def refresh_lessons(db: Session, owner_id: int, force: bool = False) -> tuple[bo
         {"role": "user", "content": (
             "Hieronder de geposte shorts van één kanaal, gesorteerd van meeste naar minste views. Trek 3 tot 6 korte, "
             "concrete lessen (in het Nederlands) over wat werkt en wat niet: type moment, hook, titelstijl, lengte, "
+            "en (als die cijfers er zijn) wat 'kijkt nog na 3 s' en 'gem. % bekeken' zeggen over het begin en de lengte, "
             "indeling, game/streamer. Wees eerlijk als de data te weinig zegt. Geef JSON: "
             '{"lessen": ["...", "..."]}\n\n' + data_lines)},
     ]
