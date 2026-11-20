@@ -672,3 +672,18 @@ body > main { max-width: 1200px; }
   .nav-toggle { justify-items: center; color: var(--text); }
   .nav-toggle span { width: 18px; height: 2px; background: var(--text); }
 }
+
+/* ---- Twitch: geselecteerd kanaal duidelijk zichtbaar ---- */
+.channel-item { position: relative; border: 1px solid transparent; border-radius: 11px; padding: .5rem .55rem; transition: background .15s, border-color .15s; }
+.channel-item:hover { background: rgba(255, 255, 255, .05); }
+.channel-item.active {
+  background: linear-gradient(135deg, rgba(255, 77, 94, .30), rgba(255, 122, 89, .12));
+  border-color: rgba(255, 110, 120, .55); box-shadow: 0 0 0 1px rgba(255, 77, 94, .2), 0 6px 20px rgba(255, 77, 94, .22);
+}
+.channel-item.active::before {
+  content: ""; position: absolute; left: -1px; top: 18%; bottom: 18%; width: 3px; border-radius: 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+}
+.channel-item.active img, .channel-item.active .channel-ph { box-shadow: 0 0 0 2px var(--accent); }
+.channel-item.active strong { color: #fff; }
+.channel-item.active .muted { color: #ffb3b9; }
