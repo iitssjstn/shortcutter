@@ -227,6 +227,16 @@ Let op: compilaties van andermans clips ziet YouTube snel als "hergebruikte cont
 wat het te gelde maken van je kanaal kan bemoeilijken. Eigen commentaar of eigen
 inbreng helpt.
 
+## Waarom wel of niet verspreid (YouTube Analytics)
+
+Op **Statistieken** zie je per geplaatste short welk deel van de weergaven uit de **Shorts-feed** kwam,
+hoeveel kijkers na **±3 seconden** nog kijken en het **gemiddeld bekeken** deel, met een korte diagnose
+(niet getest in de feed, begin pakt niet, haakt halverwege af). De cijfers worden mee opgehaald met de
+views en gaan mee in de lessen voor de AI.
+
+Nodig: in Google Cloud de **YouTube Analytics API** inschakelen (APIs & Services → Library) en je kanaal
+bij Mijn account **opnieuw koppelen** (er komt één leesrecht bij: `yt-analytics.readonly`).
+
 ## Familievriendelijk
 
 Bij **Instellingen → Familievriendelijk** (per gebruiker):

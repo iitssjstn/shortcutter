@@ -28,7 +28,9 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 API = "https://www.googleapis.com/youtube/v3"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
-SCOPES = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly"
+ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
+SCOPES = ("https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly "
+          + ANALYTICS_SCOPE)
 PRIVACY = {"private": "Privé", "unlisted": "Verborgen (unlisted)", "public": "Openbaar"}
 TITLE_MAX = 100
 DESC_MAX = 5000
@@ -127,6 +129,7 @@ def connect(db: Session, user_id: int, tokens: dict) -> YoutubeAccount:
     acc.access_token_enc = crypto.encrypt(tokens.get("access_token", ""))
     acc.expires_at = utcnow() + timedelta(seconds=int(tokens.get("expires_in", 3600)) - 60)
     acc.connected_at = utcnow()
+    acc.scopes = str(tokens.get("scope") or "")[:1000]
     db.commit()
     return acc
 

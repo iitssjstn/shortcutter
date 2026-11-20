@@ -43,6 +43,7 @@
       {% if yt_account %}
       <p>Gekoppeld: <strong>{{ yt_account.channel_title or yt_account.channel_id }}</strong><br>
         <span class="muted" style="font-size:.85rem">sinds {{ yt_account.connected_at|dt }} · laatste upload {{ yt_account.last_upload_at|dt }}</span></p>
+      {% if not yt_account.has_analytics %}<div class="flash flash-warn">Voor de uitgebreide statistieken (Shorts-feed, kijkers na 3 seconden) is één extra leesrecht nodig. <a href="/youtube/connect">Koppel opnieuw</a> en sta het toe.</div>{% endif %}
       <form method="post" action="/youtube/disconnect" class="inline" data-confirm="YouTube-kanaal ontkoppelen?">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="btn btn-danger" type="submit">Ontkoppelen</button>

@@ -132,6 +132,11 @@ class YoutubeAccount(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     connected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_upload_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scopes: Mapped[str | None] = mapped_column(Text, nullable=True)  # rechten die Google gaf
+
+    @property
+    def has_analytics(self) -> bool:
+        return "yt-analytics.readonly" in (self.scopes or "")
 
 
 class TwitchChannel(Base):
@@ -285,6 +290,12 @@ class Clip(Base, JsonMixin):
     review_state: Mapped[str | None] = mapped_column(String(12), nullable=True)  # None | skipped
     notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # Discord: 'klaar om na te kijken'
     safety_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # wat de familievriendelijke modus deed
+    # YouTube Analytics (alleen bij koppeling met het analytics-recht)
+    avg_view_pct: Mapped[float | None] = mapped_column(Float, nullable=True)  # gemiddeld bekeken deel (%), >100 = herbekeken
+    avg_view_dur: Mapped[float | None] = mapped_column(Float, nullable=True)  # gemiddelde kijkduur (s)
+    shorts_feed_share: Mapped[float | None] = mapped_column(Float, nullable=True)  # deel van de weergaven uit de Shorts-feed
+    hook_retention: Mapped[float | None] = mapped_column(Float, nullable=True)  # kijkt nog na ±3 s (0..1)
+    analytics_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|rendering|ready|failed
     render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
