@@ -11,19 +11,21 @@
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
 {% if user %}
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Zijbalk">
     <a class="brand" href="/"><span class="brand-mark">▶</span>Shortcutter</a>
-    <nav class="nav" aria-label="Hoofdmenu">
-      <a href="/" class="{{ 'active' if nav == 'dashboard' }}">Dashboard</a>
-      <a href="/review" class="{{ 'active' if nav == 'review' }}">Nakijken</a>
-      <a href="/twitch" class="{{ 'active' if nav == 'twitch' }}">Twitch</a>
-      <a href="/compilations" class="{{ 'active' if nav == 'compilations' }}">Compilaties</a>
-      <a href="/stats" class="{{ 'active' if nav == 'stats' }}">Statistieken</a>
+    <nav class="side-nav" aria-label="Hoofdmenu">
+      <a href="/" class="{{ 'active' if nav == 'dashboard' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</a>
+      <a href="/review" class="{{ 'active' if nav == 'review' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Nakijken</a>
+      <a href="/twitch" class="{{ 'active' if nav == 'twitch' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h17v11l-5 5h-4l-3 3H7v-3H3V7z"/><path d="M11 8v4M16 8v4"/></svg>Twitch</a>
+      <a href="/compilations" class="{{ 'active' if nav == 'compilations' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M7 3h10M5 6V5M19 6V5"/></svg>Compilaties</a>
+      <a href="/stats" class="{{ 'active' if nav == 'stats' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18"/><path d="M7 16v-5M12 16V6M17 16v-8"/></svg>Statistieken</a>
     </nav>
-    <details class="usermenu">
+    <details class="usermenu side-user">
       <summary class="{{ 'active' if nav in ('account', 'settings', 'keys', 'users') }}" aria-label="Accountmenu">
-        <span class="who">{{ user.username }}</span>{% if user.is_admin %} <span class="badge">admin</span>{% endif %}<span class="caret" aria-hidden="true"></span>
+        <span class="avatar" aria-hidden="true">{{ user.username[:1]|upper }}</span>
+        <span class="who-wrap"><span class="who">{{ user.username }}</span>{% if user.is_admin %}<span class="badge">admin</span>{% endif %}</span>
+        <span class="caret" aria-hidden="true"></span>
       </summary>
       <div class="usermenu-list">
         <a href="/account" class="{{ 'active' if nav == 'account' }}">Mijn account</a>
@@ -38,14 +40,26 @@
         </form>
       </div>
     </details>
+  </aside>
+  <div class="mobilebar">
+    <a class="brand" href="/"><span class="brand-mark">▶</span>Shortcutter</a>
+    <button type="button" class="btn btn-sm nav-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Menu openen"><span></span><span></span><span></span></button>
   </div>
-</header>
-{% endif %}
+  <div class="nav-scrim" aria-hidden="true"></div>
+  <main>
+    <div id="flash">
+      {% if flash %}<div class="flash flash-{{ 'error' if flash.kind == 'error' else 'ok' }}" role="status">{{ flash.msg }}</div>{% endif %}
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
 <main>
   <div id="flash">
     {% if flash %}<div class="flash flash-{{ 'error' if flash.kind == 'error' else 'ok' }}" role="status">{{ flash.msg }}</div>{% endif %}
   </div>
-  {% block content %}{% endblock %}
+  {{ self.content() }}
 </main>
+{% endif %}
 </body>
 </html>

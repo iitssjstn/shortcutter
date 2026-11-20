@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <p class="muted" style="margin:0"><a href="/compilations">← Compilaties</a></p>
-    <h1>{{ comp.title }}</h1>
+    <h1>{{ comp.title|replace("*", "") }}</h1>
     <p class="muted">{{ comp.included|length }} van {{ comp.items|length }} clips gekozen · ±{{ fmt_ts(total) }} · {{ 'staand 1080×1920 (short)' if comp.format == 'short' else 'liggend 1920×1080' }}</p>
     {% if comp.format == 'short' and total > short_max %}<div class="flash flash-error" style="margin:.4rem 0 0">Samen {{ fmt_ts(total) }}: een short mag maximaal 3 minuten zijn. Kort clips in of vink er een uit.</div>
     {% elif comp.format == 'short' and total > 60 %}<p class="hint" style="margin:.2rem 0 0">Langer dan 60 s mag (tot 3 min), maar korte shorts worden vaker uitgekeken.</p>{% endif %}

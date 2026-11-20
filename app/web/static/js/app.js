@@ -588,3 +588,15 @@ document.addEventListener("DOMContentLoaded", function () {
   try { init = JSON.parse(document.getElementById("layout-json").value || "{}") || {}; } catch (e) { init = {}; }
   update(init.type === "split" ? "split" : "crop", init.top || 0.35);
 });
+
+// ---------- zijbalk op mobiel openen/sluiten ----------
+document.addEventListener("click", function (e) {
+  var t = e.target.closest(".nav-toggle");
+  if (t) {
+    var open = document.body.classList.toggle("nav-open");
+    t.setAttribute("aria-expanded", open ? "true" : "false");
+    return;
+  }
+  if (e.target.closest(".nav-scrim")) document.body.classList.remove("nav-open");
+});
+document.addEventListener("keydown", function (e) { if (e.key === "Escape") document.body.classList.remove("nav-open"); });
