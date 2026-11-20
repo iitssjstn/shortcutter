@@ -253,6 +253,7 @@
       else out.value = "";
       divider.hidden = st.mode !== "split";
       divider.style.top = st.top * 100 + "%";
+      form.dispatchEvent(new CustomEvent("layoutchange", { detail: { mode: st.mode, top: st.top } }));
     }
 
     // ---- video en tijdlijn
@@ -570,3 +571,20 @@ document.addEventListener("keydown", function (e) {
     document.querySelectorAll("details.lay-ed").forEach(init);
   });
 })();
+
+// ---------- compilatie-editor: titel en lijstje over het voorbeeld, schuift mee met de indeling ----------
+document.addEventListener("DOMContentLoaded", function () {
+  var ov = document.getElementById("ed-overlay"), form = document.getElementById("clip-editor");
+  if (!ov || !form) return;
+  var base = ov.getAttribute("data-src"), timer = null, last = "";
+  function update(mode, top) {
+    var url = base + (mode === "split" ? "?top=" + top.toFixed(3) : "");
+    if (url === last) return;
+    clearTimeout(timer);
+    timer = setTimeout(function () { last = url; ov.src = url; }, 250);
+  }
+  form.addEventListener("layoutchange", function (e) { update(e.detail.mode, e.detail.top); });
+  var init = {};
+  try { init = JSON.parse(document.getElementById("layout-json").value || "{}") || {}; } catch (e) { init = {}; }
+  update(init.type === "split" ? "split" : "crop", init.top || 0.35);
+});

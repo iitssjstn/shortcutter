@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from pathlib import Path
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -402,3 +403,129 @@ def delete(cid: int, user: User = Depends(require_user), db: Session = Depends(g
     db.delete(comp)
     db.commit()
     return redirect("/compilations", "Compilatie verwijderd. Een eventuele YouTube-video blijft staan.")
+
+
+# ---------------------------------------------------------------- editor per clip (short)
+def _item(db: Session, user: User, cid: int, iid: int) -> tuple[Compilation, CompilationItem]:
+    comp = _comp(db, user, cid)
+    it = next((i for i in comp.items if i.id == iid), None)
+    if it is None:
+        raise HTTPException(404, "Clip niet gevonden.")
+    return comp, it
+
+
+def _initial_layout(it: CompilationItem, src_w: int, src_h: int) -> tuple[str, dict | None]:
+    """Startpunt voor de editor: eigen indeling, anders omgezet uit de eenvoudige instellingen."""
+    from app.pipeline import framing
+    from app.pipeline.facecam import parse_box
+
+    if it.layout_json:
+        try:
+            lay = framing.validate_layout(json.loads(it.layout_json))
+        except ValueError:
+            lay = None
+        if lay:
+            return lay["type"], lay
+    fw, fh = cp.SHORT_W - 2 * cp.SHORT_MARGIN, cp.SHORT_H - 2 * cp.SHORT_MARGIN
+    gx = it.crop_x if it.crop_x is not None else 0.5
+    if (it.layout or "fill") == "split":
+        box = parse_box(it.cam_box)
+        if not box:
+            return "auto", None
+        top = max(0.28, min(0.45, fw * (box[3] * src_h) / (box[2] * src_w) / fh))
+        gw = min(1.0, (fw / (fh * (1 - top))) / (src_w / src_h))
+        return "split", {"type": "split", "cam": list(box), "game": [round((1 - gw) * gx, 4), 0.0, round(gw, 4), 1.0],
+                         "top": round(top, 3)}
+    w = min(1.0, (fw / fh) / (src_w / src_h))
+    return "crop", {"type": "crop", "rect": [round((1 - w) * gx, 4), 0.0, round(w, 4), 1.0]}
+
+
+@router.get("/compilations/{cid}/items/{iid}/edit")
+def item_editor(request: Request, cid: int, iid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    from app.pipeline import media
+
+    comp, it = _item(db, user, cid, iid)
+    src = cp.item_source(cid, it)
+    if src is None:
+        cp.fetch_in_background(cid, iid)
+        return render(request, "comp_item_edit.html", {"nav": "compilations", "comp": comp, "it": it, "loading": True})
+    info = media.probe(src)
+    mode, lay = _initial_layout(it, info["width"], info["height"])
+    end = it.trim_end if it.trim_end is not None else (info["duration"] or it.duration)
+    return render(request, "comp_item_edit.html", {
+        "nav": "compilations", "comp": comp, "it": it, "loading": False,
+        "src_w": info["width"], "src_h": info["height"], "start": it.trim_start or 0.0, "end": end,
+        "dur": max(0.1, end - (it.trim_start or 0.0)),
+        "layout_mode": mode, "layout_json": json.dumps(lay) if lay else "",
+    })
+
+
+@router.get("/compilations/{cid}/items/{iid}/ready")
+def item_ready(cid: int, iid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    comp, it = _item(db, user, cid, iid)
+    if cp.item_source(cid, it) is not None:
+        return Response(status_code=200, headers={"HX-Refresh": "true"})
+    if not cp.is_fetching(cid, iid):
+        return Response('<div class="flash flash-error">Ophalen mislukt. Probeer het later opnieuw.</div>',
+                        media_type="text/html", headers={"HX-Reswap": "outerHTML"})
+    return Response(status_code=204)
+
+
+@router.get("/compilations/{cid}/items/{iid}/source")
+def item_source_file(cid: int, iid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    comp, it = _item(db, user, cid, iid)
+    src = cp.item_source(cid, it)
+    if src is None:
+        raise HTTPException(404, "Nog niet opgehaald.")
+    return FileResponse(src, media_type="video/mp4")
+
+
+@router.get("/compilations/{cid}/items/{iid}/overlay.png")
+def item_overlay(cid: int, iid: int, top: float = 0.0, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Titel en lijstje van de short als doorzichtige laag, voor over het voorbeeld in de editor."""
+    import tempfile
+
+    comp, it = _item(db, user, cid, iid)
+    items = comp.included or comp.items
+    k = items.index(it) if it in items else 0
+    area = None
+    if top > 0:
+        fh = cp.SHORT_H - 2 * cp.SHORT_MARGIN
+        area = (cp.SHORT_MARGIN + int(fh * max(0.2, min(0.6, top))) + 30, int(cp.SHORT_H * 0.82))
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "o.png"
+        cp.short_overlay(p, comp.title or "Top clips", cp.short_list(comp.ranking, items, k),
+                         f"twitch.tv/{it.channel_login}" if it.channel_login else it.streamer, area)
+        data = p.read_bytes()
+    return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-cache"})
+
+
+@router.post("/compilations/{cid}/items/{iid}/editor")
+async def item_editor_save(request: Request, cid: int, iid: int, user: User = Depends(require_user),
+                           db: Session = Depends(get_db)):
+    from app.pipeline import framing
+
+    comp, it = _item(db, user, cid, iid)
+    form = await request.form()
+    mode = form.get("layout_mode", "auto")
+    if mode == "auto":
+        lay_json, layout, cam_box = None, "split", None  # facecam automatisch zoeken, anders vol
+    elif mode in ("split", "crop"):
+        try:
+            lay = framing.validate_layout(json.loads(form.get("layout_json") or "null"))
+        except ValueError:
+            lay = None
+        if lay is None or lay["type"] != mode:
+            raise HTTPException(400, "Zet eerst de vakken op het beeld.")
+        lay_json, layout, cam_box = json.dumps(lay), it.layout, it.cam_box
+    else:
+        raise HTTPException(400, "Onbekende indeling.")
+    targets = comp.items if form.get("apply_all") in ("1", "on") else [it]
+    for x in targets:
+        x.layout_json = lay_json
+        if mode == "auto":
+            x.layout, x.cam_box = layout, cam_box
+    comp.updated_at = utcnow()
+    db.commit()
+    msg = "Indeling opgeslagen" + (" voor alle clips" if len(targets) > 1 else "") + ". Klik op Opnieuw renderen om het resultaat te zien."
+    return redirect(f"/compilations/{cid}#item-{iid}", msg)
