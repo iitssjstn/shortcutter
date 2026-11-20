@@ -319,3 +319,47 @@ def test_short_limits(admin_client, fake):
     db = new_session()
     assert db.scalar(select(CompilationSchedule)).format == "short"
     db.close()
+
+
+def test_short_item_layout(admin_client, fake, sample_video, monkeypatch):
+    c = admin_client
+    _add_key(c)
+    ch = _channel(c)
+    r = c.post("/compilations", data={"channel_ids": [str(ch.id)], "count": "5", "format": "short"})
+    cid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = new_session()
+    ids = [i.id for i in db.get(Compilation, cid).items]
+    db.close()
+    page = c.get(f"/compilations/{cid}").text
+    assert 'class="lay-ed"' in page and "Facecam onder" in page
+    form = {"title": "Top", "ranking": "countdown"}
+    for i in ids:
+        form.update({f"inc_{i}": "1", f"start_{i}": "0", f"end_{i}": "", f"layout_{i}": "fill", f"cropx_{i}": "50",
+                     f"campos_{i}": "bottom", f"cam_{i}": ""})
+    form.update({f"layout_{ids[0]}": "split", f"campos_{ids[0]}": "top", f"cropx_{ids[0]}": "20",
+                 f"cam_{ids[0]}": "0.0,0.0,0.3,0.4", f"cam_{ids[1]}": "onzin"})
+    r = c.post(f"/compilations/{cid}", data=dict(form, apply_layout=str(ids[0])))
+    assert r.status_code == 303 and f"open={ids[0]}" in r.headers["location"]
+    db = new_session()
+    items = db.get(Compilation, cid).items
+    assert all((i.layout, i.cam_pos, i.cam_box, round(i.crop_x, 2)) == ("split", "top", "0.0000,0.0000,0.3000,0.4000", 0.2)
+               for i in items)
+    db.close()
+    # render met gestapelde indeling
+    assert c.post(f"/compilations/{cid}/render").status_code == 303
+    monkeypatch.setattr(cp, "download", _fake_download(sample_video))
+    assert run_compilation_once() is True
+    db = new_session()
+    comp = db.get(Compilation, cid)
+    assert comp.status == "done", comp.error
+    info = media.probe(cp.comp_dir(cid) / comp.file_path)
+    assert (info["width"], info["height"]) == (1080, 1920)
+    db.close()
+    # zonder kader en zonder gezicht: automatisch zoeken valt terug op vol
+    from types import SimpleNamespace as N
+
+    lay, note = cp.item_layout(N(layout="split", cam_box=None, cam_pos="bottom", crop_x=0.5), sample_video,
+                               {"width": 1280, "height": 720}, 0.0, 3.0)
+    assert lay["mode"] == "fill" and "geen facecam" in note
+    assert cp.item_layout(N(layout="fill", cam_box=None, cam_pos="bottom", crop_x=0.1), sample_video, {}, 0, 3)[0] == \
+        {"mode": "fill", "crop_x": 0.1}

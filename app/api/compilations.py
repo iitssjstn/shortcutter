@@ -133,7 +133,7 @@ async def save_schedule(request: Request, user: User = Depends(require_user), db
 
 
 @router.get("/compilations/{cid}")
-def detail(request: Request, cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def detail(request: Request, cid: int, open: int = 0, user: User = Depends(require_user), db: Session = Depends(get_db)):
     from app.api.youtube import account_for
 
     comp = _comp(db, user, cid)
@@ -148,6 +148,7 @@ def detail(request: Request, cid: int, user: User = Depends(require_user), db: S
         "nav": "compilations", "comp": comp, "ranks": ranks, "total": total, "rankings": cp.RANKINGS,
         "busy": comp.status in BUSY, "formats": cp.FORMATS, "short_max": cp.SHORT_MAX_SECONDS, "fmt_ts": cp.fmt_ts, "has_video": bool(safe_child(cp.comp_dir(cid), comp.file_path)),
         "yt_account": account_for(db, user.id), "privacy": yt.PRIVACY, "max_items": cp.MAX_ITEMS,
+        "open_item": open,
     })
 
 
@@ -179,7 +180,10 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
         if end is not None and (end >= dur - 0.05 or end <= start + 0.5):
             end = None
         it.trim_start, it.trim_end = start, end
+        if comp.format == "short":
+            _read_layout(it, form)
     msg = "Opgeslagen."
+    anchor_id = None
     move = str(form.get("move", ""))
     m = re.match(r"^(\d+):(up|down|top|bottom)$", move)
     if m:
@@ -192,6 +196,17 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
             for k, x in enumerate(items):
                 x.position = k
             msg = None
+    if form.get("apply_layout"):
+        try:
+            src_id = int(str(form.get("apply_layout")))
+        except ValueError:
+            src_id = 0
+        model = next((x for x in comp.items if x.id == src_id), None)
+        if model is not None:
+            for x in comp.items:
+                x.layout, x.crop_x, x.cam_box, x.cam_pos = model.layout, model.crop_x, model.cam_box, model.cam_pos
+            msg = "Indeling op alle clips toegepast."
+            anchor_id = model.id
     if form.get("remove"):
         try:
             rid = int(str(form.get("remove")))
@@ -203,10 +218,28 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
         msg = "Clip verwijderd."
     comp.updated_at = utcnow()
     db.commit()
-    anchor = f"#item-{m.group(1)}" if m else ""
+    anchor = f"#item-{m.group(1)}" if m else (f"?open={anchor_id}#item-{anchor_id}" if anchor_id else "")
     if form.get("render"):
         return _start_render(db, comp)
     return redirect(f"/compilations/{cid}{anchor}", msg) if msg else redirect(f"/compilations/{cid}{anchor}")
+
+
+def _read_layout(it: CompilationItem, form) -> None:
+    """Indeling van één clip in een short uit het formulier (alleen als de velden er zijn)."""
+    from app.pipeline.facecam import format_box, parse_box
+
+    lay = form.get(f"layout_{it.id}")
+    if lay is None:
+        return
+    it.layout = "split" if lay == "split" else "fill"
+    pos = form.get(f"campos_{it.id}")
+    it.cam_pos = "top" if pos == "top" else "bottom"
+    try:
+        it.crop_x = max(0.0, min(1.0, float(form.get(f"cropx_{it.id}", 50)) / 100))
+    except (TypeError, ValueError):
+        pass
+    box = parse_box(str(form.get(f"cam_{it.id}", "")).strip())
+    it.cam_box = format_box(box) if box else None
 
 
 @router.post("/compilations/{cid}/add")

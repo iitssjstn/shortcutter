@@ -464,3 +464,30 @@ details.sub { border-top: 1px solid var(--border); padding-top: .4rem; }
 .safe-box { border: 1px solid var(--border); border-radius: 10px; padding: .7rem .8rem; margin: .4rem 0 .9rem; background: var(--surface-2); }
 .safe-note { font-size: .82rem; color: var(--muted); margin: 0 0 .6rem; }
 .safe-note strong { color: var(--err); font-weight: 600; }
+
+/* ---------- compilatie: indeling per clip (short) ---------- */
+.comp-item { grid-template-areas: none; }
+.lay-ed { grid-column: 1 / -1; border-top: 1px dashed var(--border); padding-top: .4rem; }
+.lay-ed > summary { font-size: .85rem; }
+.lay-body { display: grid; grid-template-columns: minmax(0, 420px) 120px; justify-content: start; gap: 1rem; align-items: start; padding-top: .5rem; }
+.lay-modes { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: .3rem 1rem; margin-bottom: .5rem; }
+.lay-modes label { display: grid; grid-auto-flow: column; gap: .35rem; align-items: center; font-weight: 500; margin: 0; }
+.lay-pick { position: relative; max-width: 420px; user-select: none; touch-action: none; border-radius: 6px; overflow: hidden; background: var(--surface-2); }
+.lay-pick img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; pointer-events: none; }
+.lay-noimg { aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--muted); font-size: .85rem; }
+.lay-sel { position: absolute; border: 2px solid #ff4fa3; background: rgba(255, 79, 163, .18); pointer-events: none; }
+.lay-crop { position: absolute; top: 0; bottom: 0; border: 2px solid #3fa7ff; background: rgba(63, 167, 255, .10); pointer-events: none; }
+.lay-slider { display: grid; gap: .2rem; font-size: .82rem; font-weight: 500; margin: .5rem 0; max-width: 420px; }
+.lay-slider input { width: 100%; accent-color: var(--accent); }
+.lay-btns { display: grid; grid-template-columns: auto auto; justify-content: start; gap: .4rem; }
+.lay-prev { display: grid; justify-items: center; gap: .2rem; }
+.lay-prev canvas { width: 108px; height: 192px; border-radius: 8px; border: 1px solid var(--border); background: #111; }
+.lay-ed[data-mode="fill"] .lay-pos, .lay-ed[data-mode="fill"] .lay-hint-split,
+.lay-ed[data-mode="fill"] [data-lay-clear] { display: none; }
+.lay-ed[data-mode="split"] .lay-pick { cursor: crosshair; }
+@media (max-width: 640px) {
+  .lay-body { grid-template-columns: minmax(0, 1fr) 90px; gap: .6rem; }
+  .lay-prev canvas { width: 90px; height: 160px; }
+  .lay-modes { grid-template-columns: 1fr 1fr; }
+  .lay-btns { grid-template-columns: 1fr; }
+}
