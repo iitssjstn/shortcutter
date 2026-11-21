@@ -19,9 +19,21 @@
     </form>
     {% endif %}
     {% for it in items %}{% set c = it.clip %}
-    <article class="card rv-item" id="r-{{ c.id }}">
-      <label class="rv-check" title="Selecteren"><input type="checkbox" name="clip_ids" value="{{ c.id }}" form="bulk-form" class="rv-sel"></label>
-      <video class="rv-video" src="/clips/{{ c.id }}/video" controls preload="none" {% if c.thumb_path %}poster="/clips/{{ c.id }}/thumb"{% endif %} playsinline></video>
+    {% set busy = c.status != 'ready' %}
+    <article class="card rv-item{{ ' is-busy' if busy }}" id="r-{{ c.id }}"{% if busy %} hx-get="/review" hx-select="#r-{{ c.id }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+      <label class="rv-check" title="Selecteren"><input type="checkbox" name="clip_ids" value="{{ c.id }}" form="bulk-form" class="rv-sel" {% if busy %}disabled{% endif %}></label>
+      {% if busy %}<div class="rv-video rv-busy"><span class="badge badge-accent">wordt opnieuw gerenderd…</span></div>
+      {% else %}<video class="rv-video" src="/clips/{{ c.id }}/video" controls preload="none" {% if c.thumb_path %}poster="/clips/{{ c.id }}/thumb"{% endif %} playsinline></video>{% endif %}
+      <div class="rv-side">
+      <div class="rv-tools">
+        <a class="btn btn-sm" href="/clips/{{ c.id }}/edit?back=review" title="Indeling (facecam/gameplay) en ondertitels">✎ Bewerken</a>
+        <form method="post" action="/clips/{{ c.id }}/generate-text">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="next" value="review">
+          <button class="btn btn-sm" type="submit" title="Laat de AI titel, beschrijving, hashtags en tags opnieuw schrijven">↻ Tekst opnieuw</button>
+        </form>
+        <a class="btn btn-sm" href="/projects/{{ c.project_id }}#clip-{{ c.id }}" title="Begin/einde, teaser, beeldvulling en meer (op de projectpagina)">Trimmen</a>
+      </div>
       <form method="post" action="/review/{{ c.id }}" class="rv-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="rv-meta muted"><a href="/projects/{{ c.project_id }}#clip-{{ c.id }}">{{ c.project.title|truncate(60) }}</a> · {{ '%.0f'|format(c.duration) }} s{% if c.teaser %} · teaser vooraan{% endif %}{% set sf = c.safety %}{% if sf %} · familievriendelijk ({{ sf.muted or 0 }} gepiept{% if sf.checked %}, {{ sf.blurred|length }} vervaagd{% endif %}){% if sf.warning %} · <span style="color:var(--err)">{{ sf.warning }}</span>{% endif %}{% endif %}{% if c.yt_status == 'failed' %} · <span style="color:var(--err)">upload mislukt: {{ c.yt_error|truncate(80) }}</span>{% endif %}</div>
@@ -38,12 +50,13 @@
             <select id="rp-{{ c.id }}" name="privacy">{% for k, v in privacy.items() %}<option value="{{ k }}" {% if k == 'public' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
         </div>
         <div class="rv-actions">
-          <button class="btn btn-primary" type="submit" name="action" value="schedule" {% if not yt_account %}disabled{% endif %}>Inplannen</button>
-          <button class="btn" type="submit" name="action" value="now" {% if not yt_account %}disabled{% endif %}>Nu uploaden</button>
+          <button class="btn btn-primary" type="submit" name="action" value="schedule" {% if not yt_account or busy %}disabled{% endif %}>Inplannen</button>
+          <button class="btn" type="submit" name="action" value="now" {% if not yt_account or busy %}disabled{% endif %}>Nu uploaden</button>
           <button class="btn" type="submit" name="action" value="save">Opslaan</button>
           <button class="btn btn-danger" type="submit" name="action" value="skip" formnovalidate>Overslaan</button>
         </div>
       </form>
+      </div>
     </article>
     {% else %}
     <div class="card empty">Niets om na te kijken. Nieuwe clips verschijnen hier zodra ze klaar zijn{% if ap.enabled %} (de autopilot haalt ze automatisch op){% endif %}.</div>

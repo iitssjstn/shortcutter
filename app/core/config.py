@@ -24,6 +24,9 @@ class Settings:
     whisper_compute: str = field(default_factory=lambda: os.environ.get("WHISPER_COMPUTE", "int8"))
     upload_concurrency: int = field(default_factory=lambda: int(os.environ.get("UPLOAD_CONCURRENCY", "4") or 4))
     whisper_threads: int = field(default_factory=lambda: int(os.environ.get("WHISPER_THREADS", "0") or 0))
+    # zwaar werk begrenzen zodat de rest van de server blijft draaien
+    ffmpeg_threads: int = field(default_factory=lambda: int(os.environ.get("FFMPEG_THREADS", "2") or 2))
+    process_nice: int = field(default_factory=lambda: int(os.environ.get("PROCESS_NICE", "10") or 0))
     public_url: str = field(default_factory=lambda: os.environ.get("PUBLIC_URL", "").strip().rstrip("/"))
     cookie_secure: bool = field(default_factory=lambda: _bool("COOKIE_SECURE", False))
     run_worker: bool = field(default_factory=lambda: _bool("RUN_WORKER", True))

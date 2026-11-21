@@ -14,8 +14,11 @@ X264 = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv
 
 
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 3600) -> None:
+    from app.core.resources import ffmpeg_args, lower_priority
+
     try:
-        res = subprocess.run(cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True, timeout=timeout)
+        res = subprocess.run(ffmpeg_args(cmd), cwd=str(cwd) if cwd else None, capture_output=True, text=True,
+                             timeout=timeout, preexec_fn=lower_priority)
     except subprocess.TimeoutExpired as exc:
         raise RenderError("ffmpeg duurde te lang en is afgebroken.") from exc
     except FileNotFoundError as exc:

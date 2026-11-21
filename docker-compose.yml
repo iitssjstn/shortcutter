@@ -22,11 +22,18 @@ services:
       WHISPER_COMPUTE: int8       # int8 (cpu), float16 (cuda)
       # Oude CPU? De app detecteert dit zelf en valt bij een crash terug op een veilige modus.
       # Handmatig forceren kan met: CT2_FORCE_CPU_ISA: GENERIC  (geen AVX), WHISPER_VAD: "false"
-      # WHISPER_THREADS: "2"      # minder CPU-threads (0 = automatisch)
+      # WHISPER_THREADS: "2"      # CPU-threads voor Whisper (0 = automatisch: helft van de kernen, max. 4)
+      # FFMPEG_THREADS: "2"       # CPU-threads per render (meer = sneller, maar meer geheugen)
+      # PROCESS_NICE: "10"        # lagere voorrang voor renderen/transcriberen (0 = uit)
       COOKIE_SECURE: "false"      # "true" zodra de app achter HTTPS (reverse proxy) draait
       # UPLOAD_CONCURRENCY: "4"   # zoveel YouTube-uploads tegelijk (los van het verwerken van projecten)
       # PUBLIC_URL: "https://shorts.jouwdomein.nl"  # nodig voor de YouTube-koppeling (redirect-URL bij Google)
       # FORWARDED_ALLOW_IPS: "172.18.0.1"  # IP van je reverse proxy, voor het juiste client-IP
+    # Grenzen zodat Shortcutter de rest van de server niet kan laten vastlopen. Raakt het geheugen
+    # vol, dan stopt alleen die ene taak (met een melding), niet de hele server. Pas aan aan je server.
+    mem_limit: 3g
+    memswap_limit: 3g
+    cpus: "2"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"]
       interval: 30s

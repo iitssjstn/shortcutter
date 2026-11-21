@@ -151,7 +151,8 @@ def set_framing(
 
 
 @router.get("/clips/{cid}/edit")
-def clip_editor(request: Request, cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def clip_editor(request: Request, cid: int, back: str = "", user: User = Depends(require_user),
+                db: Session = Depends(get_db)):
     clip = get_clip_for(db, user, cid)
     project = clip.project
     transcript = load_transcript(project.id) or {"segments": []}
@@ -173,6 +174,8 @@ def clip_editor(request: Request, cid: int, user: User = Depends(require_user), 
         "positions": captions.POSITIONS,
         "src_w": project.width or 1920,
         "src_h": project.height or 1080,
+        "back": "review" if back == "review" else "",
+        "back_url": f"/review#r-{clip.id}" if back == "review" else f"/projects/{project.id}#clip-{clip.id}",
     })
 
 
@@ -245,7 +248,8 @@ async def save_editor(request: Request, cid: int, user: User = Depends(require_u
         _queue_render(db, other)
     if others:
         msg = f"Indeling toegepast op alle {len(others) + 1} clips; ze worden opnieuw gerenderd."
-    return redirect(f"/projects/{clip.project_id}#clip-{clip.id}", "Bewerkingen opgeslagen. " + msg)
+    back = f"/review#r-{clip.id}" if form.get("back") == "review" else f"/projects/{clip.project_id}#clip-{clip.id}"
+    return redirect(back, "Bewerkingen opgeslagen. " + msg)
 
 
 @router.post("/clips/{cid}/rerender")
@@ -325,13 +329,15 @@ def _generate(db: Session, clips: list[Clip]) -> tuple[int, str | None]:
 
 
 @router.post("/clips/{cid}/generate-text")
-def generate_clip_text(cid: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def generate_clip_text(cid: int, next: str = Form(""), user: User = Depends(require_user),
+                       db: Session = Depends(get_db)):
     clip = get_clip_for(db, user, cid)
+    back = f"/review#r-{clip.id}" if next == "review" else _back(clip)
     done, err = _generate(db, [clip])
     if err:
-        return redirect(_back(clip), err, "error")
+        return redirect(back, err, "error")
     write_clips_json(db, clip.project)
-    return redirect(_back(clip), "Posttekst gegenereerd.")
+    return redirect(back, "Titel, beschrijving en tags opnieuw geschreven.")
 
 
 @router.post("/projects/{pid}/generate-texts")

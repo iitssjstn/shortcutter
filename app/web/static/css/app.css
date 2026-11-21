@@ -687,3 +687,13 @@ body > main { max-width: 1200px; }
 .channel-item.active img, .channel-item.active .channel-ph { box-shadow: 0 0 0 2px var(--accent); }
 .channel-item.active strong { color: #fff; }
 .channel-item.active .muted { color: #ffb3b9; }
+.rv-side { display: grid; gap: .6rem; min-width: 0; }
+.rv-tools { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: .4rem; }
+.rv-tools form { margin: 0; }
+.rv-busy { display: grid; place-items: center; background: var(--surface-2); }
+.rv-item.is-busy { opacity: .85; }
+@media (max-width: 640px) {
+  .rv-side { grid-column: 1 / -1; }
+  .rv-tools { grid-template-columns: 1fr 1fr 1fr; }
+  .rv-tools .btn { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: .3rem; padding-right: .3rem; }
+}
