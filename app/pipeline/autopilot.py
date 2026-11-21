@@ -47,8 +47,7 @@ def run(db: Session, ap: AutoPilot, now: datetime | None = None) -> list[int]:
         ap.last_result = "Geen kanalen gekozen."
         db.commit()
         return []
-    done_urls = set(db.scalars(select(Project.source_url).where(Project.owner_id == ap.owner_id,
-                                                                Project.source_type == "twitch")).all())
+    done_urls = twitch.imported_urls(db, ap.owner_id)
     found = []
     try:
         for ch in chans:

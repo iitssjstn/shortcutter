@@ -18,7 +18,9 @@ def find_source(pid: int) -> Path | None:
     d = project_input(pid)
     if not d.is_dir():
         return None
-    files = [p for p in d.glob("source.*") if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi")]
+    from app.pipeline.download import SOURCE_NAME
+
+    files = [p for p in d.glob("source.*") if SOURCE_NAME.fullmatch(p.name)]
     return max(files, key=lambda p: p.stat().st_size) if files else None
 
 

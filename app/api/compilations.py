@@ -208,6 +208,7 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
         if model is not None:
             for x in comp.items:
                 x.layout, x.crop_x, x.cam_box, x.cam_pos = model.layout, model.crop_x, model.cam_box, model.cam_pos
+                x.layout_json = model.layout_json
             msg = "Indeling op alle clips toegepast."
             anchor_id = model.id
     if form.get("remove"):
@@ -218,6 +219,8 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
         for it in list(comp.items):
             if it.id == rid:
                 comp.items.remove(it)
+        for k, x in enumerate(comp.items):
+            x.position = k
         msg = "Clip verwijderd."
     comp.updated_at = utcnow()
     db.commit()
@@ -248,6 +251,8 @@ def _read_layout(it: CompilationItem, form) -> None:
 @router.post("/compilations/{cid}/add")
 def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
     comp = _comp(db, user, cid)
+    if comp.status in BUSY:
+        return redirect(f"/compilations/{cid}", "Wacht tot het renderen klaar is.", "error")
     slug = twitch_clip_slug(url.strip())
     if not slug:
         return redirect(f"/compilations/{cid}#add", "Plak een Twitch-cliplink (clips.twitch.tv/… of twitch.tv/naam/clip/…).", "error")
@@ -270,7 +275,7 @@ def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user),
             game = twitch.get_game_name(db, clip["game_id"])
         except twitch.TwitchError:
             game = None
-    comp.items.append(weekly.item_from_clip(clip, ch, game, len(comp.items)))
+    comp.items.append(weekly.item_from_clip(clip, ch, game, max((i.position for i in comp.items), default=-1) + 1))
     comp.updated_at = utcnow()
     db.commit()
     return redirect(f"/compilations/{cid}", "Clip toegevoegd (onderaan).")
@@ -279,6 +284,8 @@ def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user),
 def _start_render(db: Session, comp: Compilation):
     if comp.status in BUSY:
         return redirect(f"/compilations/{comp.id}", "Deze compilatie wordt al gerenderd.")
+    if comp.yt_status in ("queued", "uploading"):
+        return redirect(f"/compilations/{comp.id}", "Wacht tot de YouTube-upload klaar is voordat je opnieuw rendert.", "error")
     if len(comp.included) < 2:
         return redirect(f"/compilations/{comp.id}", "Vink minstens 2 clips aan.", "error")
     if len(comp.included) > cp.MAX_ITEMS:
@@ -286,7 +293,7 @@ def _start_render(db: Session, comp: Compilation):
     if comp.format == "short":
         if len(comp.included) > cp.MAX_SHORT_ITEMS:
             return redirect(f"/compilations/{comp.id}", f"Een short-top-lijst kan maximaal {cp.MAX_SHORT_ITEMS} clips hebben.", "error")
-        total = sum(i.length for i in comp.included)
+        total = cp.short_total(comp)
         if total > cp.SHORT_MAX_SECONDS + 0.5:
             return redirect(f"/compilations/{comp.id}", f"Samen {total:.0f} s: een short mag maximaal {cp.SHORT_MAX_SECONDS // 60} minuten duren. Kort clips in (Eind) of vink er een uit.", "error")
     comp.status = "queued"
@@ -403,6 +410,8 @@ def delete(cid: int, user: User = Depends(require_user), db: Session = Depends(g
     comp = _comp(db, user, cid)
     if comp.status == "rendering":
         return redirect(f"/compilations/{cid}", "Wacht tot het renderen klaar is.", "error")
+    if comp.yt_status == "uploading":
+        return redirect(f"/compilations/{cid}", "Wacht tot de YouTube-upload klaar is.", "error")
     shutil.rmtree(cp.comp_dir(cid), ignore_errors=True)
     db.delete(comp)
     db.commit()
@@ -514,6 +523,8 @@ async def item_editor_save(request: Request, cid: int, iid: int, user: User = De
     from app.pipeline import framing
 
     comp, it = _item(db, user, cid, iid)
+    if comp.status in BUSY:
+        return redirect(f"/compilations/{cid}", "Wacht tot het renderen klaar is.", "error")
     form = await request.form()
     mode = str(form.get("layout_mode", "auto"))
     if mode == "auto":

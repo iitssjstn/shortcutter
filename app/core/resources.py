@@ -22,16 +22,21 @@ def whisper_threads(requested: int = 0) -> int:
     return max(1, min(4, cores // 2))
 
 
-def lower_priority() -> None:
-    """Voor subprocess.preexec_fn: zet de nice-waarde van het kindproces."""
+def lower_priority(cmd: list[str]) -> list[str]:
+    """Start het commando met een lagere voorrang via `nice`.
+
+    (Niet via preexec_fn: dat is onveilig in een programma met meerdere threads en kan vastlopen.)
+    """
+    import shutil
+
     try:
         from app.core.config import get_settings
 
         n = get_settings().process_nice
-        if n > 0:
-            os.nice(n)
     except Exception:  # noqa: BLE001 - nooit het starten blokkeren
-        pass
+        return cmd
+    nice = shutil.which("nice") if n > 0 else None
+    return [nice, "-n", str(n), *cmd] if nice and cmd else cmd
 
 
 def ffmpeg_args(cmd: list[str]) -> list[str]:

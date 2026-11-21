@@ -369,9 +369,10 @@ def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: s
 
 def _num(v, default: float) -> float:
     try:
-        return float(v)
+        f = float(v)
     except (TypeError, ValueError):
         return default
+    return f if math.isfinite(f) else default
 
 
 def _peak(v, start: float, end: float) -> float | None:

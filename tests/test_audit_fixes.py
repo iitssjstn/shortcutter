@@ -150,3 +150,49 @@ def test_unicode_compilation_title_download_header():
 
     h = attachment("Łódź-中文-top.mp4")["Content-Disposition"]
     h.encode("latin-1")
+
+
+def test_mask_hyphenated_and_nan_subscore():
+    from app.pipeline import pick, safety
+
+    assert safety.mask("shit-faced!") == "s***-f****!"
+    assert safety.mask("fucking!") == "f******!"
+    assert pick._num(float("nan"), 5.0) == 5.0
+
+
+def test_render_clip_unexpected_error_marks_failed(settings, monkeypatch, app):
+    from app.pipeline import framing, run
+
+    create_user("bob")
+    pid, (cid,) = make_project_with_clip(settings, "bob")
+
+    def boom(*a, **k):
+        raise ValueError("cv2 kapot")
+
+    monkeypatch.setattr(framing, "choose_framing", boom)
+    db = new_session()
+    clip = db.get(Clip, cid)
+    clip.layout_json = None
+    db.commit()
+    run.render_clip(db, clip, settings.data_dir / "nergens.mp4", {"width": 640, "height": 360, "has_audio": True}, {"segments": []})
+    clip = db.get(Clip, cid)
+    assert clip.status == "failed" and "ValueError" in clip.render_error
+    db.close()
+
+
+def test_half_merged_download_not_used_as_source(settings):
+    from app.core.paths import find_source, project_input
+
+    d = project_input(99)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "source.f137.mp4").write_bytes(b"x" * 100)
+    assert find_source(99) is None
+    (d / "source.mp4").write_bytes(b"x" * 10)
+    assert find_source(99).name == "source.mp4"
+
+
+def test_lower_priority_uses_nice_prefix():
+    from app.core import resources
+
+    cmd = resources.lower_priority(["ffmpeg", "-version"])
+    assert cmd[-2:] == ["ffmpeg", "-version"]

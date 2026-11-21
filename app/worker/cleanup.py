@@ -23,8 +23,14 @@ def run_cleanup(db: Session) -> dict:
     src_days = get_global_int(db, "source_retention_days")
     proj_days = get_global_int(db, "project_retention_days")
 
+    from app.core.models import Clip, Job
+
+    busy_upload = set(db.scalars(select(Job.project_id).where(Job.kind == "upload", Job.status.in_(("queued", "running")))))
+    busy_upload |= set(db.scalars(select(Clip.project_id).where(Clip.yt_status.in_(("queued", "uploading")))))
     projects = db.scalars(select(Project).where(Project.status.not_in(ACTIVE_STATUSES))).all()
     for p in projects:
+        if p.id in busy_upload:
+            continue  # er loopt nog een YouTube-upload
         ref = p.finished_at or p.updated_at or p.created_at
         age = now - ref
         if proj_days > 0 and age > timedelta(days=proj_days):
@@ -45,7 +51,9 @@ def run_cleanup(db: Session) -> dict:
     from app.pipeline import compile as cp
 
     for c in db.scalars(select(Compilation).where(Compilation.status.not_in(("queued", "rendering")))).all():
-        age = now - (c.finished_at or c.updated_at or c.created_at)
+        if c.yt_status in ("queued", "uploading"):
+            continue
+        age = now - max(d for d in (c.finished_at, c.updated_at, c.created_at) if d is not None)
         if proj_days > 0 and age > timedelta(days=proj_days):
             shutil.rmtree(cp.comp_dir(c.id), ignore_errors=True)
             db.delete(c)

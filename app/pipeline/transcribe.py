@@ -82,9 +82,9 @@ def extract_audio(media: Path, out: Path) -> Path:
     from app.core.resources import ffmpeg_args, lower_priority
 
     res = subprocess.run(
-        ffmpeg_args(["ffmpeg", "-y", "-loglevel", "error", "-nostdin", "-i", str(media), "-vn", "-ac", "1",
-                     "-ar", "16000", "-c:a", "pcm_s16le", str(out)]),
-        capture_output=True, text=True, timeout=3600, preexec_fn=lower_priority,
+        lower_priority(ffmpeg_args(["ffmpeg", "-y", "-loglevel", "error", "-nostdin", "-i", str(media), "-vn", "-ac",
+                                    "1", "-ar", "16000", "-c:a", "pcm_s16le", str(out)])),
+        capture_output=True, text=True, errors="replace", timeout=3600,
     )
     if res.returncode != 0 or not out.exists() or out.stat().st_size < 1000:
         raise WhisperError("Kon de audio niet uit de video halen (heeft de video wel geluid?).")
@@ -143,12 +143,23 @@ def _run_worker(audio, tmp_out, model_name, device, compute, threads, vad, isa, 
         env["CT2_FORCE_CPU_ISA"] = isa
     from app.core.resources import lower_priority, whisper_threads
 
+    import threading
+
     proc = subprocess.Popen(
-        _worker_cmd(audio, tmp_out, model_name, device, compute, whisper_threads(threads), vad),
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
-        cwd=str(Path(__file__).resolve().parents[2]), env=env, preexec_fn=lower_priority,
+        lower_priority(_worker_cmd(audio, tmp_out, model_name, device, compute, whisper_threads(threads), vad)),
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1,
+        cwd=str(Path(__file__).resolve().parents[2]), env=env,
     )
     assert proc.stdout is not None
+    timed_out = threading.Event()
+
+    def _kill():  # de leesloop blokkeert; zonder deze wachthond zou een vastgelopen Whisper eeuwig duren
+        timed_out.set()
+        proc.kill()
+
+    watchdog = threading.Timer(TIMEOUT, _kill)
+    watchdog.daemon = True
+    watchdog.start()
     try:
         for line in proc.stdout:
             line = line.rstrip()
@@ -156,16 +167,23 @@ def _run_worker(audio, tmp_out, model_name, device, compute, threads, vad, isa, 
                 if progress:
                     try:
                         progress(float(line.split()[1]))
-                    except (ValueError, IndexError):
+                    except Exception:  # noqa: BLE001 - voortgang melden mag de transcriptie nooit breken
                         pass
             elif line.startswith("ERROR "):
                 tail.append(line[6:])
             elif line:
                 tail.append(line)
-        return proc.wait(timeout=TIMEOUT), tail
+        code = proc.wait(timeout=60)
     except subprocess.TimeoutExpired as exc:
-        proc.kill()
         raise WhisperError("Transcriptie duurde te lang en is afgebroken.") from exc
+    finally:
+        watchdog.cancel()
+        if proc.poll() is None:  # bij elke fout: geen los Whisper-proces laten doordraaien
+            proc.kill()
+            proc.wait()
+    if timed_out.is_set():
+        raise WhisperError("Transcriptie duurde te lang en is afgebroken.")
+    return code, tail
 
 
 def transcribe(

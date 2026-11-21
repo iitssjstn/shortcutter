@@ -46,11 +46,7 @@ def is_profane(word: str) -> bool:
 
 def mask(word: str) -> str:
     """'fucking!' -> 'f******!' (leestekens blijven staan)."""
-    m = re.match(r"^(\W*)(\w)([\w']*)(\W*)$", word or "", re.UNICODE)
-    if not m:
-        return word
-    lead, first, rest, trail = m.groups()
-    return f"{lead}{first}{'*' * len(rest)}{trail}"
+    return re.sub(r"(\w)([\w']*)", lambda m: m[1] + "*" * len(m[2]), word or "")
 
 
 def censor_words(words: list[dict]) -> list[dict]:

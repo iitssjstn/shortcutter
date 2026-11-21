@@ -90,8 +90,7 @@ def twitch_page(
                 clips = twitch.get_clips(db, selected.broadcaster_id, period)
         except twitch.TwitchError as exc:
             error = str(exc)
-    imported = set(db.scalars(select(Project.source_url).where(Project.owner_id == user.id,
-                                                              Project.source_type == "twitch")).all())
+    imported = twitch.imported_urls(db, user.id)
     return render(request, "twitch.html", {
         "nav": "twitch",
         "channels": channels,

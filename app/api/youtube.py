@@ -143,6 +143,8 @@ def _check_uploadable(db: Session, user: User, clip: Clip) -> None:
         raise HTTPException(400, "Deze clip is nog niet gerenderd.")
     if clip.yt_status in ("queued", "uploading"):
         raise HTTPException(400, "Deze clip staat al in de wachtrij om te uploaden.")
+    if clip.status in ("pending", "rendering"):
+        raise HTTPException(400, "Deze clip wordt nog (opnieuw) gerenderd; wacht tot hij klaar is.")
 
 
 @router.post("/clips/{cid}/youtube")

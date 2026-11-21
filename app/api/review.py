@@ -42,14 +42,16 @@ def review_page(request: Request, user: User = Depends(require_user), db: Sessio
     clips = list(db.scalars(review_query(user.id).options(selectinload(Clip.project))
                             .order_by(Project.created_at.desc(), Clip.index).limit(PAGE)).all())
     total = review_count(db, user.id)
-    slots, why = timing.next_slots(db, user.id, max(1, len(clips)))
+    ready = [c for c in clips if c.status == "ready"]
+    slots, why = timing.next_slots(db, user.id, max(1, len(ready)))
+    slot_for = dict(zip((c.id for c in ready), slots))  # clips die nog renderen krijgen (nog) geen moment
     ap = autopilot.autopilot_for(db, user.id)
     us = user_settings(db, user.id)
     db.commit()
     channels = list(db.scalars(select(TwitchChannel).where(TwitchChannel.owner_id == user.id)
                                .order_by(TwitchChannel.display_name)).all())
     return render(request, "review.html", {
-        "nav": "review", "items": [{"clip": c, "slot": slots[i] if i < len(slots) else None} for i, c in enumerate(clips)],
+        "nav": "review", "items": [{"clip": c, "slot": slot_for.get(c.id)} for c in clips],
         "total": total, "why": why, "ap": ap, "us": us, "channels": channels,
         "periods": twitch.PERIOD_LABELS, "every_choices": autopilot.EVERY_CHOICES,
         "framing_modes": FRAMING_MODES, "yt_account": account_for(db, user.id), "privacy": yt.PRIVACY,
@@ -124,7 +126,7 @@ async def review_bulk(request: Request, user: User = Depends(require_user), db: 
             ids.append(int(v))
         except (TypeError, ValueError):
             continue
-    clips = [c for c in db.scalars(review_query(user.id).where(Clip.id.in_(ids or [0]))
+    clips = [c for c in db.scalars(review_query(user.id).where(Clip.id.in_(ids or [0]), Clip.status == "ready")
                                    .order_by(Project.created_at.desc(), Clip.index)).all()]
     if not clips:
         return redirect("/review", "Selecteer eerst een of meer clips.", "error")

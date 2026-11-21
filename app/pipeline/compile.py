@@ -346,16 +346,35 @@ def short_segment(src: Path, start: float, dur: float, out: Path, cwd: Path, *, 
     _run(cmd, cwd=cwd)
 
 
+def short_total(comp: Compilation) -> float:
+    """Lengte van een short: de clips plus een eventuele intro/outro."""
+    items = comp.included[:MAX_SHORT_ITEMS]
+    return (sum(i.length for i in items) + (INTRO_SECONDS if comp.intro else 0.0)
+            + (OUTRO_SECONDS if comp.outro else 0.0))
+
+
 def item_source(cid: int, it: CompilationItem) -> Path | None:
     """Al gedownload bronbestand van deze clip (of None)."""
     d = comp_dir(cid) / "clips" / it.slug
-    files = [p for p in d.glob("source.*") if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov")] if d.is_dir() else []
+    from app.pipeline.download import SOURCE_NAME
+
+    files = [p for p in d.glob("source.*") if SOURCE_NAME.fullmatch(p.name)] if d.is_dir() else []
     return files[0] if files else None
 
 
+_dl_locks: dict[tuple[int, str], threading.Lock] = {}
+_dl_locks_guard = threading.Lock()
+
+
 def ensure_source(cid: int, it: CompilationItem) -> Path:
-    """Bronbestand van deze clip, zo nodig eerst downloaden (blijft bewaard voor de editor en opnieuw renderen)."""
-    return item_source(cid, it) or download(it.clip_url, comp_dir(cid) / "clips" / it.slug)[0]
+    """Bronbestand van deze clip, zo nodig eerst downloaden (blijft bewaard voor de editor en opnieuw renderen).
+
+    Eén download tegelijk per clip: de editor en de render kunnen hem allebei vragen.
+    """
+    with _dl_locks_guard:
+        lock = _dl_locks.setdefault((cid, it.slug), threading.Lock())
+    with lock:
+        return item_source(cid, it) or download(it.clip_url, comp_dir(cid) / "clips" / it.slug)[0]
 
 
 _fetching: set[tuple[int, int]] = set()
@@ -628,7 +647,7 @@ def render_compilation(db: Session, cid: int) -> None:
     items = comp.included[: MAX_SHORT_ITEMS if short else MAX_ITEMS]
     if len(items) < 2:
         raise RenderError("Kies minstens 2 clips voor een compilatie.")
-    if short and sum(i.length for i in items) > SHORT_MAX_SECONDS + 0.5:
+    if short and short_total(comp) > SHORT_MAX_SECONDS + 0.5:
         raise RenderError(f"Een short mag maximaal {SHORT_MAX_SECONDS // 60} minuten duren. Kort clips in of haal er een weg.")
     fw, fh = (SHORT_W, SHORT_H) if short else (W, H)
     base = comp_dir(cid)
