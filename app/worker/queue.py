@@ -87,14 +87,31 @@ def recover(db: Session) -> int:
                 from app.core.models import Clip
 
                 clip = db.get(Clip, j.clip_id)
-                if clip is not None:
+                if clip is not None and j.kind == "upload":
+                    if clip.yt_status in ("queued", "uploading"):
+                        clip.yt_status = "failed"
+                        clip.yt_error = "De server stopte onverwacht tijdens de upload. Probeer het opnieuw."
+                elif clip is not None:
                     clip.status = "failed"
                     clip.render_error = msg
         else:
             j.status = "queued"
             j.started_at = None
+    db.flush()
+    _release_orphan_uploads(db)
     db.commit()
     return len(jobs)
+
+
+def _release_orphan_uploads(db: Session) -> None:
+    """Clips die op 'uploading'/'queued' staan zonder upload-job in de wachtrij weer vrijgeven."""
+    from app.core.models import Clip
+
+    live = set(db.scalars(select(Job.clip_id).where(Job.kind == "upload", Job.status.in_(("queued", "running")))))
+    for clip in db.scalars(select(Clip).where(Clip.yt_status.in_(("queued", "uploading")))):
+        if clip.id not in live:
+            clip.yt_status = "failed"
+            clip.yt_error = "De upload is onderbroken. Probeer het opnieuw."
 
 
 def queue(db: Session) -> list[Job]:

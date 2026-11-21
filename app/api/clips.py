@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -100,10 +101,13 @@ def _parse_time(val: str) -> float:
             total = 0.0
             for p in parts:
                 total = total * 60 + p
-            return total
-        return float(val)
+        else:
+            total = float(val)
     except ValueError as exc:
         raise HTTPException(400, f"Ongeldige tijd: {val!r}. Gebruik seconden of m:ss.") from exc
+    if not math.isfinite(total):
+        raise HTTPException(400, f"Ongeldige tijd: {val!r}. Gebruik seconden of m:ss.")
+    return total
 
 
 def _validate_range(project, start: float, end: float) -> None:
@@ -184,13 +188,13 @@ async def save_editor(request: Request, cid: int, user: User = Depends(require_u
     clip = get_clip_for(db, user, cid)
     form = await request.form()
     # indeling
-    mode = form.get("layout_mode", "auto")
+    mode = str(form.get("layout_mode", "auto"))
     if mode == "auto":
         clip.layout_json = None
     elif mode in ("split", "crop"):
         try:
-            layout = framing.validate_layout(json.loads(form.get("layout_json") or "null"))
-        except ValueError:
+            layout = framing.validate_layout(json.loads(str(form.get("layout_json") or "null")))
+        except (ValueError, TypeError, KeyError, IndexError):
             layout = None
         if layout is None or layout["type"] != mode:
             raise HTTPException(400, "Teken eerst de vakken op het beeld.")

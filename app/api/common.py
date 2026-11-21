@@ -42,7 +42,20 @@ templates.env.globals.update(
 
 
 def fmt_dt(dt) -> str:
-    return dt.strftime("%d-%m-%Y %H:%M") if dt else "–"
+    """Tijden staan als UTC (zonder tijdzone) in de database; toon ze in de lokale tijd."""
+    if not dt:
+        return "–"
+    from datetime import timezone
+
+    from app.api.youtube import local_tz
+
+    try:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(local_tz())
+    except (AttributeError, ValueError, OverflowError):
+        pass
+    return dt.strftime("%d-%m-%Y %H:%M")
 
 
 def fmt_time(t: float | None) -> str:

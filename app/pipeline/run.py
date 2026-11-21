@@ -223,6 +223,27 @@ def teaser_window(clip: Clip, source: Path, info: dict) -> tuple[float, float] |
 
 def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: dict) -> None:
     """Render één clip. Faalt nooit hard: zet clip.status en render_error."""
+    cid = clip.id
+    try:
+        _render_clip(db, clip, source, info, transcript)
+    except Exception as exc:  # noqa: BLE001 - anders blijft de clip eeuwig op 'rendering' staan
+        log.exception("Clip %s renderen mislukt", cid)
+        db.rollback()
+        clip = db.get(Clip, cid)
+        if clip is not None:
+            clip.status = "failed"
+            clip.render_error = exc.message if isinstance(exc, PipelineError) else f"Onverwachte fout ({type(exc).__name__})."
+            clip.file_path = None
+            db.commit()
+    finally:
+        out_dir = project_output(clip.project_id) if clip is not None else None
+        if out_dir is not None:
+            base = clip_basename(clip)
+            for tmp in (f"{base}_teaser.mp4", f"{base}_raw_safe.mp4"):
+                (out_dir / tmp).unlink(missing_ok=True)
+
+
+def _render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: dict) -> None:
     project = clip.project
     out_dir = project_output(project.id)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -292,6 +313,7 @@ def render_clip(db: Session, clip: Clip, source: Path, info: dict, transcript: d
         clip.status = "failed"
         clip.render_error = exc.message
         clip.file_path = None
+        clip.raw_path = None  # de ruwe versie kan half overschreven zijn
         db.commit()
         return
     if clip.captions_enabled:

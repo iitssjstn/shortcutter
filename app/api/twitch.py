@@ -90,8 +90,7 @@ def twitch_page(
                 clips = twitch.get_clips(db, selected.broadcaster_id, period)
         except twitch.TwitchError as exc:
             error = str(exc)
-    imported = set(db.scalars(select(Project.source_url).where(Project.owner_id == user.id,
-                                                              Project.source_type == "twitch")).all())
+    imported = twitch.imported_urls(db, user.id)
     return render(request, "twitch.html", {
         "nav": "twitch",
         "channels": channels,
@@ -174,7 +173,7 @@ async def import_clips(
     fixed: TwitchChannel | None = None
     if form.get("channel_id"):
         try:
-            fixed = _channel(db, user, int(form.get("channel_id", "0")))
+            fixed = _channel(db, user, int(str(form.get("channel_id", "0"))))
         except ValueError as exc:
             raise HTTPException(400, "Ongeldig kanaal.") from exc
     # zonder vast kanaal (zoeken op game): alleen clips van kanalen in je eigen lijst

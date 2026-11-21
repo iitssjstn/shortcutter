@@ -134,14 +134,17 @@ def _queue_upload(db: Session, clip: Clip, opts: dict) -> None:
 
 
 def _check_uploadable(db: Session, user: User, clip: Clip) -> None:
+    if clip.owner_id != user.id:  # nooit op andermans YouTube-kanaal publiceren, ook niet als beheerder
+        raise HTTPException(403, "Alleen de eigenaar van deze clip kan hem naar YouTube uploaden.")
     if account_for(db, clip.owner_id) is None:
-        raise HTTPException(400, "Koppel eerst een YouTube-kanaal bij Mijn account."
-                            if clip.owner_id == user.id else "De eigenaar van deze clip heeft geen YouTube-kanaal gekoppeld.")
+        raise HTTPException(400, "Koppel eerst een YouTube-kanaal bij Mijn account.")
     base = project_output(clip.project_id)
     if not (safe_child(base, clip.file_path) or safe_child(base, clip.raw_path)):
         raise HTTPException(400, "Deze clip is nog niet gerenderd.")
     if clip.yt_status in ("queued", "uploading"):
         raise HTTPException(400, "Deze clip staat al in de wachtrij om te uploaden.")
+    if clip.status in ("pending", "rendering"):
+        raise HTTPException(400, "Deze clip wordt nog (opnieuw) gerenderd; wacht tot hij klaar is.")
 
 
 @router.post("/clips/{cid}/youtube")
@@ -193,7 +196,7 @@ async def schedule_project(request: Request, pid: int, user: User = Depends(requ
     if start is None or start < datetime.now(start.tzinfo) + timedelta(minutes=15):
         return redirect(f"/projects/{pid}#youtube", "Kies een eerste publicatietijd minstens 15 minuten in de toekomst.", "error")
     try:
-        hours = max(1, min(24 * 14, int(form.get("interval_hours", 24))))
+        hours = max(1, min(24 * 14, int(str(form.get("interval_hours", 24)))))
     except ValueError:
         hours = 24
     made_for_kids = form.get("made_for_kids") in ("1", "on", "true")
@@ -224,8 +227,8 @@ def run_upload(db: Session, clip_id: int) -> bool:
     from app.estimation.service import clip_estimate
 
     clip = db.get(Clip, clip_id)
-    if clip is None:
-        return True
+    if clip is None or clip.yt_status == "done":
+        return True  # al geüpload (bv. dubbele job na een herstart): niet nog een keer
     acc = account_for(db, clip.owner_id)
     base = project_output(clip.project_id)
     path = safe_child(base, clip.file_path) or safe_child(base, clip.raw_path)
@@ -247,6 +250,8 @@ def run_upload(db: Session, clip_id: int) -> bool:
                 note = "De geplande publicatietijd was al voorbij; de video is privé geüpload. Zet hem in YouTube Studio op openbaar."
         except ValueError:
             opts["publish_at"] = None
+        clip.yt_options_json = json.dumps(opts, ensure_ascii=False)  # zodat statistieken de echte tijd zien
+        db.commit()
     from app.estimation.trends import upload_tags
 
     tags = upload_tags(clip.yt_tags, clip.hashtags)
@@ -262,12 +267,23 @@ def run_upload(db: Session, clip_id: int) -> bool:
             tags=tags,
         )
     except yt.YoutubeError as exc:
+        db.rollback()
         clip.yt_status = "failed"
         clip.yt_error = str(exc)
         db.commit()
         return False
+    except Exception as exc:  # onverwachte fout: niet eeuwig op 'uploading' blijven staan
+        import logging
+
+        logging.getLogger(__name__).warning("Upload van clip %s mislukt: %s", clip_id, type(exc).__name__)
+        db.rollback()
+        clip.yt_status = "failed"
+        clip.yt_error = f"Upload mislukt door een onverwachte fout ({type(exc).__name__}). Probeer het opnieuw."
+        db.commit()
+        return False
     clip.yt_status = "done"
     clip.yt_video_id = res["id"]
+    db.commit()  # direct vastleggen: na een herstart niet nog een keer uploaden
     clip.yt_error = note
     if res.get("privacy") == "private" and opts.get("privacy") != "private" and not opts.get("publish_at"):
         clip.yt_error = ("YouTube heeft de video privé gezet. Dat gebeurt bij API-projecten die (nog) niet door Google "

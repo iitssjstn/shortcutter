@@ -185,6 +185,63 @@ def _api_error(r: httpx.Response) -> YoutubeError:
     return YoutubeError(f"YouTube gaf fout {r.status_code}{f' ({reason})' if reason else ''}.")
 
 
+RETRY_STATUS = (500, 502, 503, 504)
+UPLOAD_ATTEMPTS = 5
+
+
+def _file_chunks(path: Path, offset: int, chunk: int = 1 << 20):
+    with path.open("rb") as fh:
+        fh.seek(offset)
+        while True:
+            data = fh.read(chunk)
+            if not data:
+                return
+            yield data
+
+
+def _resume_offset(client: httpx.Client, session_url: str, size: int) -> int | httpx.Response:
+    """Vraag aan YouTube hoeveel er al binnen is. Geeft de offset, of het eindantwoord als de upload al klaar is."""
+    r = client.put(session_url, content=b"", headers={"Content-Length": "0", "Content-Range": f"bytes */{size}"})
+    if r.status_code in (200, 201):
+        return r
+    if r.status_code != 308:
+        raise _api_error(r)
+    rng = r.headers.get("range", "")
+    try:
+        return int(rng.rsplit("-", 1)[1]) + 1 if rng else 0
+    except (IndexError, ValueError):
+        return 0
+
+
+def _send_resumable(client: httpx.Client, session_url: str, path: Path, size: int) -> httpx.Response:
+    """Stuur het bestand; bij een verbroken verbinding of 5xx gaan we verder waar YouTube gebleven was."""
+    offset, last = 0, "onbekend"
+    for attempt in range(UPLOAD_ATTEMPTS):
+        if attempt:
+            time.sleep(2 * attempt)
+            try:
+                got = _resume_offset(client, session_url, size)
+            except httpx.HTTPError as exc:
+                last = type(exc).__name__
+                continue
+            if isinstance(got, httpx.Response):
+                return got
+            offset = got
+        headers = {"Content-Type": "video/mp4", "Content-Length": str(size - offset)}
+        if offset:
+            headers["Content-Range"] = f"bytes {offset}-{size - 1}/{size}"
+        try:
+            r = client.put(session_url, content=_file_chunks(path, offset), headers=headers)
+        except httpx.HTTPError as exc:  # verbinding weg: opnieuw, vanaf waar YouTube is
+            last = type(exc).__name__
+            continue
+        if r.status_code in RETRY_STATUS or r.status_code == 308:
+            last = f"HTTP {r.status_code}"
+            continue
+        return r
+    raise YoutubeError(f"Upload afgebroken ({last}).")
+
+
 def upload(
     db: Session,
     acc: YoutubeAccount,
@@ -220,21 +277,13 @@ def upload(
         if r.status_code != 200 or "location" not in r.headers:
             raise _api_error(r)
         session_url = r.headers["location"]
-        last_exc: Exception | None = None
-        for attempt in range(3):
-            try:
-                with path.open("rb") as fh:
-                    r = client.put(session_url, content=fh, headers={"Content-Type": "video/mp4",
-                                                                      "Content-Length": str(size)})
-                break
-            except httpx.HTTPError as exc:  # verbinding weg: opnieuw proberen
-                last_exc = exc
-                time.sleep(2 * (attempt + 1))
-        else:
-            raise YoutubeError(f"Upload afgebroken ({type(last_exc).__name__}).")
+        r = _send_resumable(client, session_url, path, size)
         if r.status_code not in (200, 201):
             raise _api_error(r)
-        data = r.json()
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise YoutubeError("YouTube gaf een onleesbaar antwoord terug.") from exc
     vid = data.get("id")
     if not vid:
         raise YoutubeError("YouTube gaf geen video-ID terug.")

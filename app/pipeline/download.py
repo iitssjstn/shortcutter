@@ -57,11 +57,20 @@ def _clean_error(msg: str) -> str:
     return msg.replace("ERROR: ", "").strip()[:400]
 
 
+class _NotSingle(Exception):
+    pass
+
+
+SOURCE_NAME = re.compile(r"source\.(mp4|mkv|webm|mov|m4v|avi)", re.I)  # niet source.f137.mp4 (half samengevoegd)
+
+
 def download(url: str, out_dir: Path, cookies_file: Path | None = None) -> tuple[Path, dict]:
     """Download naar out_dir/source.mp4. Geeft (pad, info) terug."""
     import yt_dlp  # lazy import
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("source.*"):  # restjes van een afgebroken download (bv. source.f137.mp4)
+        old.unlink(missing_ok=True)
     opts = {
         "format": FORMAT,
         "merge_output_format": "mp4",
@@ -77,7 +86,15 @@ def download(url: str, out_dir: Path, cookies_file: Path | None = None) -> tuple
         opts["cookiefile"] = str(cookies_file)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            info = ydl.extract_info(url, download=False)  # eerst kijken wat het is, dan pas downloaden
+            if info is not None and info.get("_type") in ("playlist", "multi_video"):
+                raise _NotSingle("Playlists en kanalen worden niet ondersteund; plak de link van één video.")
+            if info is not None and (info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming")):
+                raise _NotSingle("Livestreams kunnen niet; wacht tot de stream voorbij is en plak dan de link.")
+            if info is not None:
+                info = ydl.process_ie_result(info, download=True)
+    except _NotSingle as exc:
+        raise DownloadFailed(str(exc)) from exc
     except Exception as exc:  # yt_dlp.utils.DownloadError e.a.
         msg = _clean_error(str(exc))
         if _BLOCKED_PATTERNS.search(msg):
@@ -94,7 +111,7 @@ def download(url: str, out_dir: Path, cookies_file: Path | None = None) -> tuple
     if info.get("_type") == "playlist":
         raise DownloadFailed("Playlists worden niet ondersteund; plak de link van één video.")
     candidates = sorted(out_dir.glob("source.*"), key=lambda p: p.stat().st_size, reverse=True)
-    candidates = [p for p in candidates if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov")]
+    candidates = [p for p in candidates if SOURCE_NAME.fullmatch(p.name)]
     if not candidates:
         raise DownloadFailed("Downloaden mislukt: geen videobestand gevonden.")
     meta = {

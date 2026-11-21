@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 from pathlib import Path
@@ -61,7 +62,7 @@ async def create(request: Request, user: User = Depends(require_user), db: Sessi
     period = str(form.get("period", "week"))
     period = period if period in twitch.PERIODS else "week"
     try:
-        count = max(2, min(cp.MAX_ITEMS, int(form.get("count", 10))))
+        count = max(2, min(cp.MAX_ITEMS, int(str(form.get("count", 10)))))
     except ValueError:
         count = 10
     ranking = str(form.get("ranking", "countdown"))
@@ -101,7 +102,7 @@ async def save_schedule(request: Request, user: User = Depends(require_user), db
         return redirect("/compilations#weekly", "Kies minstens één kanaal voor de wekelijkse compilatie.", "error")
     def _int(name, lo, hi, default):
         try:
-            return max(lo, min(hi, int(form.get(name, default))))
+            return max(lo, min(hi, int(str(form.get(name, default)))))
         except (TypeError, ValueError):
             return default
     was_enabled = s.enabled
@@ -155,9 +156,10 @@ def detail(request: Request, cid: int, open: int = 0, user: User = Depends(requi
 
 def _float(v, default=None):
     try:
-        return round(float(str(v).replace(",", ".")), 2) if str(v).strip() != "" else default
+        x = float(str(v).replace(",", ".")) if str(v).strip() != "" else None
     except ValueError:
         return default
+    return round(x, 2) if x is not None and math.isfinite(x) else default
 
 
 @router.post("/compilations/{cid}")
@@ -206,6 +208,7 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
         if model is not None:
             for x in comp.items:
                 x.layout, x.crop_x, x.cam_box, x.cam_pos = model.layout, model.crop_x, model.cam_box, model.cam_pos
+                x.layout_json = model.layout_json
             msg = "Indeling op alle clips toegepast."
             anchor_id = model.id
     if form.get("remove"):
@@ -216,6 +219,8 @@ async def save(request: Request, cid: int, user: User = Depends(require_user), d
         for it in list(comp.items):
             if it.id == rid:
                 comp.items.remove(it)
+        for k, x in enumerate(comp.items):
+            x.position = k
         msg = "Clip verwijderd."
     comp.updated_at = utcnow()
     db.commit()
@@ -236,7 +241,7 @@ def _read_layout(it: CompilationItem, form) -> None:
     pos = form.get(f"campos_{it.id}")
     it.cam_pos = "top" if pos == "top" else "bottom"
     try:
-        it.crop_x = max(0.0, min(1.0, float(form.get(f"cropx_{it.id}", 50)) / 100))
+        it.crop_x = max(0.0, min(1.0, (_float(form.get(f"cropx_{it.id}"), 50.0) or 0.0) / 100))
     except (TypeError, ValueError):
         pass
     box = parse_box(str(form.get(f"cam_{it.id}", "")).strip())
@@ -246,6 +251,8 @@ def _read_layout(it: CompilationItem, form) -> None:
 @router.post("/compilations/{cid}/add")
 def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user), db: Session = Depends(get_db)):
     comp = _comp(db, user, cid)
+    if comp.status in BUSY:
+        return redirect(f"/compilations/{cid}", "Wacht tot het renderen klaar is.", "error")
     slug = twitch_clip_slug(url.strip())
     if not slug:
         return redirect(f"/compilations/{cid}#add", "Plak een Twitch-cliplink (clips.twitch.tv/… of twitch.tv/naam/clip/…).", "error")
@@ -268,7 +275,7 @@ def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user),
             game = twitch.get_game_name(db, clip["game_id"])
         except twitch.TwitchError:
             game = None
-    comp.items.append(weekly.item_from_clip(clip, ch, game, len(comp.items)))
+    comp.items.append(weekly.item_from_clip(clip, ch, game, max((i.position for i in comp.items), default=-1) + 1))
     comp.updated_at = utcnow()
     db.commit()
     return redirect(f"/compilations/{cid}", "Clip toegevoegd (onderaan).")
@@ -277,6 +284,8 @@ def add_clip(cid: int, url: str = Form(...), user: User = Depends(require_user),
 def _start_render(db: Session, comp: Compilation):
     if comp.status in BUSY:
         return redirect(f"/compilations/{comp.id}", "Deze compilatie wordt al gerenderd.")
+    if comp.yt_status in ("queued", "uploading"):
+        return redirect(f"/compilations/{comp.id}", "Wacht tot de YouTube-upload klaar is voordat je opnieuw rendert.", "error")
     if len(comp.included) < 2:
         return redirect(f"/compilations/{comp.id}", "Vink minstens 2 clips aan.", "error")
     if len(comp.included) > cp.MAX_ITEMS:
@@ -284,7 +293,7 @@ def _start_render(db: Session, comp: Compilation):
     if comp.format == "short":
         if len(comp.included) > cp.MAX_SHORT_ITEMS:
             return redirect(f"/compilations/{comp.id}", f"Een short-top-lijst kan maximaal {cp.MAX_SHORT_ITEMS} clips hebben.", "error")
-        total = sum(i.length for i in comp.included)
+        total = cp.short_total(comp)
         if total > cp.SHORT_MAX_SECONDS + 0.5:
             return redirect(f"/compilations/{comp.id}", f"Samen {total:.0f} s: een short mag maximaal {cp.SHORT_MAX_SECONDS // 60} minuten duren. Kort clips in (Eind) of vink er een uit.", "error")
     comp.status = "queued"
@@ -320,8 +329,10 @@ def video(cid: int, download: int = 0, user: User = Depends(require_user), db: S
     path = safe_child(cp.comp_dir(cid), comp.file_path)
     if path is None:
         raise HTTPException(404, "Nog geen video.")
+    from app.api.downloads import attachment
+
     name = re.sub(r"[^\w\- ]+", "", comp.title or "compilatie").strip().replace(" ", "-")[:80] or "compilatie"
-    headers = {"Content-Disposition": f'attachment; filename="{name}.mp4"'} if download else None
+    headers = attachment(f"{name}.mp4") if download else None
     return FileResponse(path, media_type="video/mp4", headers=headers)
 
 
@@ -399,6 +410,8 @@ def delete(cid: int, user: User = Depends(require_user), db: Session = Depends(g
     comp = _comp(db, user, cid)
     if comp.status == "rendering":
         return redirect(f"/compilations/{cid}", "Wacht tot het renderen klaar is.", "error")
+    if comp.yt_status == "uploading":
+        return redirect(f"/compilations/{cid}", "Wacht tot de YouTube-upload klaar is.", "error")
     shutil.rmtree(cp.comp_dir(cid), ignore_errors=True)
     db.delete(comp)
     db.commit()
@@ -510,14 +523,16 @@ async def item_editor_save(request: Request, cid: int, iid: int, user: User = De
     from app.pipeline import framing
 
     comp, it = _item(db, user, cid, iid)
+    if comp.status in BUSY:
+        return redirect(f"/compilations/{cid}", "Wacht tot het renderen klaar is.", "error")
     form = await request.form()
-    mode = form.get("layout_mode", "auto")
+    mode = str(form.get("layout_mode", "auto"))
     if mode == "auto":
         lay_json, layout, cam_box = None, "split", None  # facecam automatisch zoeken, anders vol
     elif mode in ("split", "crop"):
         try:
-            lay = framing.validate_layout(json.loads(form.get("layout_json") or "null"))
-        except ValueError:
+            lay = framing.validate_layout(json.loads(str(form.get("layout_json") or "null")))
+        except (ValueError, TypeError, KeyError, IndexError):
             lay = None
         if lay is None or lay["type"] != mode:
             raise HTTPException(400, "Zet eerst de vakken op het beeld.")

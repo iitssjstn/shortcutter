@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core import crypto
-from app.core.auth import CSRF_COOKIE, LoginRequired, csrf_protect, ensure_csrf_cookie
+from app.core.auth import CSRF_COOKIE, SESSION_COOKIE, LoginRequired, csrf_protect, ensure_csrf_cookie
 from app.core.config import Settings, get_settings, set_settings
 from app.core.db import init_db, new_session
 from app.core.setup import ensure_setup_code, has_users, reset_cache
@@ -69,6 +70,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def setup_and_headers(request: Request, call_next):
         path = request.url.path
+        too_big = _body_too_big(request, path, s)
+        if too_big:
+            return JSONResponse({"detail": too_big}, status_code=413)
         if not path.startswith("/static/"):
             ensure_csrf_cookie(request)
         if not path.startswith(SETUP_EXEMPT):
@@ -138,9 +142,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+_FILE_ROUTES = re.compile(r"^/(projects|projects/\d+/upload-source|keys/cookies)$")
+SMALL_BODY = 4 * 1024 * 1024  # gewone formulieren
+
+
+def _body_too_big(request: Request, path: str, s: Settings) -> str | None:
+    """Weiger grote verzoeken voordat ze ingelezen worden (anders vult een anoniem verzoek de schijf)."""
+    if request.method not in ("POST", "PUT", "PATCH"):
+        return None
+    try:
+        size = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        return "Ongeldige Content-Length."
+    if size <= SMALL_BODY:
+        return None
+    if not _FILE_ROUTES.match(path) or not request.cookies.get(SESSION_COOKIE):
+        return "Verzoek te groot."
+    if size > s.max_upload_mb * 1024 * 1024 + SMALL_BODY:
+        return f"Bestand is groter dan {s.max_upload_mb} MB."
+    return None
+
+
 def _set_csrf(request: Request, response: Response, s: Settings) -> None:
     new_csrf = getattr(request.state, "new_csrf", None)
-    if new_csrf and not request.cookies.get(CSRF_COOKIE):
+    if new_csrf and request.cookies.get(CSRF_COOKIE) != new_csrf:  # ook een te korte/kapotte cookie vervangen
         response.set_cookie(
             CSRF_COOKIE, new_csrf, httponly=True, samesite="lax", secure=s.cookie_secure, path="/",
             max_age=60 * 60 * 24 * 30,

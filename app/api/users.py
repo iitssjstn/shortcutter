@@ -149,9 +149,14 @@ def delete_user(uid: int, admin: User = Depends(require_admin), db: Session = De
         return redirect("/users", "Je kunt jezelf niet verwijderen; laat een andere beheerder dat doen.", "error")
     import shutil
 
+    from app.core.models import Compilation
+    from app.pipeline.compile import comp_dir
+
     for p in db.scalars(select(Project).where(Project.owner_id == u.id)):
         shutil.rmtree(project_input(p.id), ignore_errors=True)
         shutil.rmtree(project_output(p.id), ignore_errors=True)
+    for cid in db.scalars(select(Compilation.id).where(Compilation.owner_id == u.id)):
+        shutil.rmtree(comp_dir(cid), ignore_errors=True)
     name = u.username
     invalidate_user_sessions(db, u.id)
     db.delete(u)

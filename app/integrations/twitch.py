@@ -224,3 +224,21 @@ def test_creds(client_id: str, secret: str) -> tuple[str, str]:
         status = {"invalid": "ongeldig", "rate_limit": "rate_limit"}.get(exc.kind, "fout")
         return status, str(exc)
     return "geldig", "Sleutel werkt."
+
+
+def imported_urls(db, owner_id: int) -> set[str]:
+    """Bron-URL's van de projecten van deze gebruiker, plus de vaste clips.twitch.tv-vorm (voor dubbel-controle)."""
+    from sqlalchemy import select
+
+    from app.core.models import Project
+    from app.pipeline.download import twitch_clip_slug
+
+    out: set[str] = set()
+    for url in db.scalars(select(Project.source_url).where(Project.owner_id == owner_id)).all():
+        if not url:
+            continue
+        out.add(url)
+        slug = twitch_clip_slug(url)
+        if slug:
+            out.add(f"https://clips.twitch.tv/{slug}")
+    return out

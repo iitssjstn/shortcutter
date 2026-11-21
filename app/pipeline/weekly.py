@@ -36,7 +36,7 @@ def item_from_clip(clip: dict, ch: TwitchChannel, game: str | None, pos: int) ->
 
 
 def build_draft(db: Session, owner_id: int, channels: list[TwitchChannel], period: str, count: int,
-                ranking: str, fmt: str = "landscape") -> Compilation:
+                ranking: str, fmt: str = "landscape", fit_short: bool = False) -> Compilation:
     """Zoek de best bekeken clips van deze (toegestane) kanalen en maak er een concept van."""
     fmt = fmt if fmt in cp.FORMATS else "landscape"
     if fmt == "short":
@@ -54,11 +54,16 @@ def build_draft(db: Session, owner_id: int, channels: list[TwitchChannel], perio
     except twitch.TwitchError as exc:
         raise DraftError(str(exc)) from exc
     found.sort(key=lambda x: x[0]["views"], reverse=True)
-    seen, top = set(), []
+    seen, top, total = set(), [], 0.0
     for clip, ch in found:
-        if clip["id"] not in seen and clip.get("duration", 0) >= 3:
-            seen.add(clip["id"])
-            top.append((clip, ch))
+        dur = float(clip.get("duration") or 0)
+        if clip["id"] in seen or dur < 3:
+            continue
+        if fit_short and fmt == "short" and total + dur > cp.SHORT_MAX_SECONDS:
+            continue  # automatisch renderen: de short moet binnen 3 minuten blijven
+        seen.add(clip["id"])
+        top.append((clip, ch))
+        total += dur
         if len(top) >= count:
             break
     if len(top) < 2:
@@ -111,7 +116,10 @@ def last_slot(s: CompilationSchedule, now_utc: datetime | None = None) -> dateti
 
 def next_slot(s: CompilationSchedule, now_utc: datetime | None = None) -> datetime:
     """Volgende geplande moment in lokale tijd (voor op de pagina)."""
-    return (last_slot(s, now_utc) + timedelta(days=7)).replace(tzinfo=timezone.utc).astimezone(_tz())
+    tz = _tz()
+    local = last_slot(s, now_utc).replace(tzinfo=timezone.utc).astimezone(tz)
+    nxt = (local.replace(tzinfo=None) + timedelta(days=7)).replace(tzinfo=tz)  # 7 dagen in lokale (wand)tijd
+    return nxt.astimezone(timezone.utc).astimezone(tz)
 
 
 def is_due(s: CompilationSchedule, now_utc: datetime | None = None) -> bool:
@@ -127,7 +135,8 @@ def run_schedule(db: Session, s: CompilationSchedule, now_utc: datetime | None =
     chans = list(db.scalars(select(TwitchChannel).where(TwitchChannel.owner_id == s.owner_id,
                                                         TwitchChannel.id.in_(s.channel_ids or [0]))).all())
     try:
-        comp = build_draft(db, s.owner_id, chans, "week", s.count, s.ranking, s.format or "landscape")
+        comp = build_draft(db, s.owner_id, chans, "week", s.count, s.ranking, s.format or "landscape",
+                           fit_short=True)
     except DraftError as exc:
         s.last_result = f"Geen compilatie gemaakt: {exc}"
         db.commit()

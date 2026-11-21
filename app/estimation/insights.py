@@ -62,8 +62,15 @@ def sync_user_stats(db: Session, user_id: int) -> int:
     updated = 0
     with _client_factory() as client:
         headers, params_extra = {}, {}
+        token = None
         if acc is not None:
-            headers["Authorization"] = f"Bearer {yt.access_token(db, acc, client)}"
+            try:
+                token = yt.access_token(db, acc, client)
+            except yt.YoutubeError as exc:  # koppeling verlopen/ingetrokken: val terug op de API-sleutel
+                log.warning("YouTube-koppeling van gebruiker %s werkt niet (%s)", user_id, exc.kind)
+                db.rollback()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         else:
             key = youtube_key(db)
             if not key:

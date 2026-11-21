@@ -6,7 +6,7 @@ import logging
 import math
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 import httpx
@@ -39,7 +39,7 @@ CLAIM_WORDS = re.compile(
 class LLMConfig:
     base_url: str
     model: str
-    api_key: str
+    api_key: str = field(repr=False)
     fallbacks: tuple[str, ...] = ()  # volgende modellen als het eerste faalt
 
     @property
@@ -369,9 +369,10 @@ def _user_prompt(chunk: str, n: int, min_dur: float, max_dur: float, language: s
 
 def _num(v, default: float) -> float:
     try:
-        return float(v)
+        f = float(v)
     except (TypeError, ValueError):
         return default
+    return f if math.isfinite(f) else default
 
 
 def _peak(v, start: float, end: float) -> float | None:
