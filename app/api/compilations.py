@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 from pathlib import Path
@@ -61,7 +62,7 @@ async def create(request: Request, user: User = Depends(require_user), db: Sessi
     period = str(form.get("period", "week"))
     period = period if period in twitch.PERIODS else "week"
     try:
-        count = max(2, min(cp.MAX_ITEMS, int(form.get("count", 10))))
+        count = max(2, min(cp.MAX_ITEMS, int(str(form.get("count", 10)))))
     except ValueError:
         count = 10
     ranking = str(form.get("ranking", "countdown"))
@@ -101,7 +102,7 @@ async def save_schedule(request: Request, user: User = Depends(require_user), db
         return redirect("/compilations#weekly", "Kies minstens één kanaal voor de wekelijkse compilatie.", "error")
     def _int(name, lo, hi, default):
         try:
-            return max(lo, min(hi, int(form.get(name, default))))
+            return max(lo, min(hi, int(str(form.get(name, default)))))
         except (TypeError, ValueError):
             return default
     was_enabled = s.enabled
@@ -155,9 +156,10 @@ def detail(request: Request, cid: int, open: int = 0, user: User = Depends(requi
 
 def _float(v, default=None):
     try:
-        return round(float(str(v).replace(",", ".")), 2) if str(v).strip() != "" else default
+        x = float(str(v).replace(",", ".")) if str(v).strip() != "" else None
     except ValueError:
         return default
+    return round(x, 2) if x is not None and math.isfinite(x) else default
 
 
 @router.post("/compilations/{cid}")
@@ -236,7 +238,7 @@ def _read_layout(it: CompilationItem, form) -> None:
     pos = form.get(f"campos_{it.id}")
     it.cam_pos = "top" if pos == "top" else "bottom"
     try:
-        it.crop_x = max(0.0, min(1.0, float(form.get(f"cropx_{it.id}", 50)) / 100))
+        it.crop_x = max(0.0, min(1.0, (_float(form.get(f"cropx_{it.id}"), 50.0) or 0.0) / 100))
     except (TypeError, ValueError):
         pass
     box = parse_box(str(form.get(f"cam_{it.id}", "")).strip())
@@ -320,8 +322,10 @@ def video(cid: int, download: int = 0, user: User = Depends(require_user), db: S
     path = safe_child(cp.comp_dir(cid), comp.file_path)
     if path is None:
         raise HTTPException(404, "Nog geen video.")
+    from app.api.downloads import attachment
+
     name = re.sub(r"[^\w\- ]+", "", comp.title or "compilatie").strip().replace(" ", "-")[:80] or "compilatie"
-    headers = {"Content-Disposition": f'attachment; filename="{name}.mp4"'} if download else None
+    headers = attachment(f"{name}.mp4") if download else None
     return FileResponse(path, media_type="video/mp4", headers=headers)
 
 
@@ -511,13 +515,13 @@ async def item_editor_save(request: Request, cid: int, iid: int, user: User = De
 
     comp, it = _item(db, user, cid, iid)
     form = await request.form()
-    mode = form.get("layout_mode", "auto")
+    mode = str(form.get("layout_mode", "auto"))
     if mode == "auto":
         lay_json, layout, cam_box = None, "split", None  # facecam automatisch zoeken, anders vol
     elif mode in ("split", "crop"):
         try:
-            lay = framing.validate_layout(json.loads(form.get("layout_json") or "null"))
-        except ValueError:
+            lay = framing.validate_layout(json.loads(str(form.get("layout_json") or "null")))
+        except (ValueError, TypeError, KeyError, IndexError):
             lay = None
         if lay is None or lay["type"] != mode:
             raise HTTPException(400, "Zet eerst de vakken op het beeld.")

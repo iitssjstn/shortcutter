@@ -51,6 +51,7 @@
           <div class="field"><label>Base-URL</label><input name="base_url" type="url" value="{{ c.base_url }}" required></div>
           <div class="field"><label>Model <span class="muted" style="font-weight:400">(optioneel)</span></label><input name="model" type="text" value="{{ c.model or '' }}" placeholder="leeg = modellen uit Instellingen">
             <div class="hint">Leeg: de modellen per taak bij Instellingen; staat daar ook niets, dan bij OpenRouter <code>openrouter/auto</code>.</div></div>
+          <div class="field"><label>API-key <span class="muted" style="font-weight:400">(alleen nodig bij een andere server)</span></label><input name="api_key" type="password" autocomplete="new-password" placeholder="Laat leeg als de server hetzelfde blijft"></div>
           <button class="btn btn-sm" type="submit">Opslaan</button>
         </form>
         <form method="post" action="/keys/{{ c.id }}/replace" autocomplete="off">

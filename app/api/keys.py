@@ -148,14 +148,24 @@ def edit_llm(
     name: str = Form(...),
     base_url: str = Form(...),
     model: str = Form(""),
+    api_key: str = Form(""),
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     cred = _get(db, kid)
     if cred.provider != "llm":
         raise HTTPException(400, "Alleen LLM-configuraties hebben deze velden.")
+    new_url = _clean_base_url(base_url)
+    if urlparse(new_url).netloc.lower() != urlparse(cred.base_url or DEFAULT_LLM_BASE).netloc.lower():
+        # de sleutel mag niet ongemerkt naar een andere server: vraag hem opnieuw
+        if not api_key.strip():
+            return redirect("/keys", "Een andere server vraagt om de API-key: vul hem opnieuw in bij het wijzigen.", "error")
+        secret = _clean_secret(api_key)
+        cred.encrypted_value = crypto.encrypt(secret)
+        cred.mask = crypto.mask_secret(secret)
+        cred.last_test_status = None
     cred.name = (name.strip() or cred.name)[:100]
-    cred.base_url = _clean_base_url(base_url)
+    cred.base_url = new_url
     cred.model = model.strip()[:120] or None  # leeg = modellen uit Instellingen / automatisch
     cred.updated_at = utcnow()
     audit(db, user, "sleutel_gewijzigd", f"llm #{cred.id} ({cred.name}): instellingen")

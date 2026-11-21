@@ -31,12 +31,12 @@ def sync_all_stats() -> None:
     try:
         owners = set(db.scalars(select(Clip.owner_id).where(Clip.posted_at.is_not(None))).all())
         for uid in owners:
-            try:
-                sync_user_stats(db, uid)
-                refresh_lessons(db, uid)
-            except Exception:  # noqa: BLE001
-                db.rollback()
-                log.exception("Statistieken bijwerken voor gebruiker %s mislukt", uid)
+            for step in (sync_user_stats, refresh_lessons):  # apart: een mislukte sync blokkeert de lessen niet
+                try:
+                    step(db, uid)
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+                    log.exception("%s voor gebruiker %s mislukt", step.__name__, uid)
     finally:
         db.close()
 

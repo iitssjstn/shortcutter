@@ -33,6 +33,7 @@ TAGS_MAX_CHARS = 450  # YouTube staat 500 tekens aan tags toe; wat marge
 HASHTAG = re.compile(r"#(\w{2,40})", re.UNICODE)
 
 _cache: dict[str, tuple[float, dict | None]] = {}
+FAIL_SECONDS = 3600  # na een fout (bv. quota op) een uur niet opnieuw proberen
 _lock = threading.Lock()
 
 
@@ -127,6 +128,7 @@ def fetch(db: Session, owner_id: int, query: str, short: bool = True) -> dict | 
             r = client.get(f"{API}/search", params=params, headers=headers)
             if r.status_code != 200:
                 log.warning("Trends: zoeken mislukt (HTTP %s)", r.status_code)
+                _remember(key, None, FAIL_SECONDS)  # niet bij elke tekst opnieuw quota verbranden
                 return None
             ids = [it.get("id", {}).get("videoId") for it in r.json().get("items", [])]
             ids = [i for i in ids if i]
@@ -138,10 +140,15 @@ def fetch(db: Session, owner_id: int, query: str, short: bool = True) -> dict | 
                     result["query"] = query
     except httpx.HTTPError as exc:
         log.warning("Trends ophalen mislukt: %s", type(exc).__name__)
+        _remember(key, None, FAIL_SECONDS)
         return None
-    with _lock:
-        _cache[key] = (time.time() + CACHE_SECONDS, result)
+    _remember(key, result, CACHE_SECONDS)
     return result
+
+
+def _remember(key: str, result: dict | None, seconds: float) -> None:
+    with _lock:
+        _cache[key] = (time.time() + seconds, result)
 
 
 def prompt_text(tr: dict | None) -> str:

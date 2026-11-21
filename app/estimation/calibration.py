@@ -38,6 +38,11 @@ class Point:
     est_high_at_post: float | None = None
 
 
+MIN_SCORE_SPREAD = 0.5
+MAX_SLOPE = math.log(3)  # hooguit 3x meer weergaven per scorepunt
+MAX_LOG_VIEWS = math.log(1e9)
+
+
 def _quantile(vals: list[float], q: float) -> float:
     s = sorted(vals)
     if not s:
@@ -57,9 +62,14 @@ def fit(points: list[Point]) -> Calibration:
         return Calibration("mediaan", n, factor=statistics.median(ratios))
     xs = [p.score for p in pts]
     ys = [math.log(max(p.actual, 1)) for p in pts]
+    if statistics.pstdev(xs) < MIN_SCORE_SPREAD:
+        # scores liggen te dicht bij elkaar voor een betrouwbare helling
+        ratios = [max(p.actual, 1) / max(1.0, p.baseline * multiplier(p.score)) for p in pts]
+        return Calibration("mediaan", n, factor=statistics.median(ratios))
     mx, my = statistics.fmean(xs), statistics.fmean(ys)
     sxx = sum((x - mx) ** 2 for x in xs)
     b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx > 1e-9 else 0.0
+    b = max(0.0, min(MAX_SLOPE, b))
     a = my - b * mx
     resid = [y - (a + b * x) for x, y in zip(xs, ys)]
     lo = math.exp(_quantile(resid, 0.10))
@@ -72,7 +82,7 @@ def fit(points: list[Point]) -> Calibration:
 def apply(cal: Calibration, score: float, baseline: float) -> tuple[float, float, float]:
     """Geeft (midden, laag-factor, hoog-factor) terug."""
     if cal.method == "regressie":
-        return math.exp(cal.a + cal.b * score), cal.low_factor, cal.high_factor
+        return math.exp(min(MAX_LOG_VIEWS, cal.a + cal.b * score)), cal.low_factor, cal.high_factor
     if cal.method == "mediaan":
         return baseline * multiplier(score) * cal.factor, LOW_FACTOR, HIGH_FACTOR
     return baseline * multiplier(score), LOW_FACTOR, HIGH_FACTOR

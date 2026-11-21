@@ -149,8 +149,8 @@ async def review_settings(request: Request, user: User = Depends(require_user), 
     form = await request.form()
     us = user_settings(db, user.id)
     try:
-        us.uploads_per_day = max(1, min(10, int(form.get("uploads_per_day", 3))))
-        us.min_gap_hours = max(1, min(24, int(form.get("min_gap_hours", 3))))
+        us.uploads_per_day = max(1, min(10, int(str(form.get("uploads_per_day", 3)))))
+        us.min_gap_hours = max(1, min(24, int(str(form.get("min_gap_hours", 3)))))
     except ValueError:
         return redirect("/review#momenten", "Ongeldig getal.", "error")
     db.commit()
@@ -177,7 +177,7 @@ async def save_autopilot(request: Request, user: User = Depends(require_user), d
 
     def _int(name, lo, hi, default):
         try:
-            return max(lo, min(hi, int(form.get(name, default))))
+            return max(lo, min(hi, int(str(form.get(name, default)))))
         except (TypeError, ValueError):
             return default
 

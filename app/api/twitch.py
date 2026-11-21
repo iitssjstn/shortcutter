@@ -174,7 +174,7 @@ async def import_clips(
     fixed: TwitchChannel | None = None
     if form.get("channel_id"):
         try:
-            fixed = _channel(db, user, int(form.get("channel_id", "0")))
+            fixed = _channel(db, user, int(str(form.get("channel_id", "0"))))
         except ValueError as exc:
             raise HTTPException(400, "Ongeldig kanaal.") from exc
     # zonder vast kanaal (zoeken op game): alleen clips van kanalen in je eigen lijst
