@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Clip bewerken{% endblock %}
 {% block content %}
-<p><a href="/projects/{{ project.id }}#clip-{{ clip.id }}" class="muted">← Terug naar het project</a></p>
+<p><a href="{{ back_url }}" class="muted">← Terug naar {{ 'Nakijken' if back == 'review' else 'het project' }}</a></p>
 <div class="page-head">
   <div style="min-width:0">
     <h1>Clip {{ clip.index }} bewerken</h1>
@@ -13,6 +13,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="layout_json" id="layout-json" value="{{ layout_json }}">
   <input type="hidden" name="layout_mode" id="layout-mode" value="{{ layout_mode }}">
+  <input type="hidden" name="back" value="{{ back }}">
 
   <section class="card ed-card">
     <div class="ed-panes">
@@ -65,7 +66,7 @@
           <span class="ed-time" id="ed-time">0:00 / {{ clip.duration|ts }}</span>
         </div>
         <div class="ed-actions">
-          <a class="btn" href="/projects/{{ project.id }}#clip-{{ clip.id }}">Annuleren</a>
+          <a class="btn" href="{{ back_url }}">Annuleren</a>
           <button class="btn btn-primary" type="submit">Opslaan</button>
         </div>
       </div>
@@ -103,7 +104,7 @@
     <button class="linklike" type="submit" name="reset_captions" value="1" style="margin-top:.5rem">Ondertitels terugzetten naar het transcript</button>
     {% endif %}
     <div class="ed-actions ed-savebar">
-      <a class="btn" href="/projects/{{ project.id }}#clip-{{ clip.id }}">Annuleren</a>
+      <a class="btn" href="{{ back_url }}">Annuleren</a>
       <button class="btn btn-primary" type="submit">Opslaan</button>
     </div>
   </section>

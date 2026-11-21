@@ -79,10 +79,12 @@ def transcribe_in_process(
 # ---------------------------------------------------------------- in de app
 def extract_audio(media: Path, out: Path) -> Path:
     """16 kHz mono wav: kleiner en betrouwbaarder om te decoderen dan de hele video."""
+    from app.core.resources import ffmpeg_args, lower_priority
+
     res = subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-nostdin", "-i", str(media), "-vn", "-ac", "1", "-ar", "16000",
-         "-c:a", "pcm_s16le", str(out)],
-        capture_output=True, text=True, timeout=3600,
+        ffmpeg_args(["ffmpeg", "-y", "-loglevel", "error", "-nostdin", "-i", str(media), "-vn", "-ac", "1",
+                     "-ar", "16000", "-c:a", "pcm_s16le", str(out)]),
+        capture_output=True, text=True, timeout=3600, preexec_fn=lower_priority,
     )
     if res.returncode != 0 or not out.exists() or out.stat().st_size < 1000:
         raise WhisperError("Kon de audio niet uit de video halen (heeft de video wel geluid?).")
@@ -139,10 +141,12 @@ def _run_worker(audio, tmp_out, model_name, device, compute, threads, vad, isa, 
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
     if isa:
         env["CT2_FORCE_CPU_ISA"] = isa
+    from app.core.resources import lower_priority, whisper_threads
+
     proc = subprocess.Popen(
-        _worker_cmd(audio, tmp_out, model_name, device, compute, threads, vad),
+        _worker_cmd(audio, tmp_out, model_name, device, compute, whisper_threads(threads), vad),
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
-        cwd=str(Path(__file__).resolve().parents[2]), env=env,
+        cwd=str(Path(__file__).resolve().parents[2]), env=env, preexec_fn=lower_priority,
     )
     assert proc.stdout is not None
     try:

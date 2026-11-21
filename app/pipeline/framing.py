@@ -114,6 +114,9 @@ def sample_faces(video: Path, start: float, end: float, step: float = TRACK_STEP
     """Meet elke `step` seconden de gezichten. Tijden zijn relatief aan `start`. None = geen detector."""
     import cv2
 
+    from app.core.resources import ffmpeg_threads
+
+    cv2.setNumThreads(ffmpeg_threads())  # zelfde begrenzing als ffmpeg
     detector = detector or _detector()
     if detector is None:
         return None

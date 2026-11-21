@@ -26,7 +26,7 @@ PAGE = 20
 
 def review_query(user_id: int):
     return (select(Clip).join(Project, Clip.project_id == Project.id)
-            .where(Clip.owner_id == user_id, Clip.status == "ready", Clip.posted_at.is_(None),
+            .where(Clip.owner_id == user_id, Clip.status.in_(("ready", "pending", "rendering")), Clip.posted_at.is_(None),
                    (Clip.yt_status.is_(None)) | (Clip.yt_status == "failed"),
                    (Clip.review_state.is_(None)), Project.status == "done"))
 
@@ -73,6 +73,8 @@ def _schedule(db: Session, user: User, clip: Clip, when_str: str, privacy: str =
 
     from app.api.youtube import _check_uploadable, _parse_local, _queue_upload
 
+    if clip.status != "ready":
+        raise HTTPException(400, "Deze clip wordt nog (opnieuw) gerenderd; wacht tot hij klaar is.")
     _check_uploadable(db, user, clip)
     when = None if now else _parse_local(when_str)
     if not now and when is None:

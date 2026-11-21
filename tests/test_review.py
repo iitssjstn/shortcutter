@@ -145,3 +145,34 @@ def test_discord_webhook_secret_and_digest(admin_client, settings, dc):
     db = new_session()
     assert db.get(UserSettings, user_id("admin")).discord_webhook_enc is None
     db.close()
+
+
+def test_review_edit_and_regenerate(admin_client, settings, monkeypatch):
+    from app.pipeline import posttext
+
+    pid, (cid,) = make_project_with_clip(settings, "admin")
+    page = admin_client.get("/review").text
+    assert f'/clips/{cid}/edit?back=review' in page and "Tekst opnieuw" in page
+    # editor terug naar Nakijken
+    ed = admin_client.get(f"/clips/{cid}/edit?back=review").text
+    assert f'href="/review#r-{cid}"' in ed and 'name="back" value="review"' in ed
+    import re
+    texts = re.findall(r'name="cap_text" value="([^"]*)"', ed)
+    r = admin_client.post(f"/clips/{cid}/editor", data={"layout_mode": "auto", "back": "review", "cap_pos": "70",
+                                                       "cap_text": texts})
+    assert r.status_code == 303 and r.headers["location"] == f"/review#r-{cid}"
+    # tekst opnieuw laten schrijven, terug naar Nakijken
+    monkeypatch.setattr(posttext, "generate_for_clips", lambda db, project, clips: (1, None))
+    import app.api.clips as clips_api
+    monkeypatch.setattr(clips_api, "_generate", lambda db, clips: (1, None))
+    r = admin_client.post(f"/clips/{cid}/generate-text", data={"next": "review"})
+    assert r.status_code == 303 and r.headers["location"] == f"/review#r-{cid}"
+    # wordt opnieuw gerenderd: blijft zichtbaar, maar inplannen kan niet
+    db = new_session()
+    db.get(Clip, cid).status = "rendering"
+    db.commit()
+    db.close()
+    page = admin_client.get("/review").text
+    assert "wordt opnieuw gerenderd" in page and 'hx-select="#r-' in page
+    r = admin_client.post(f"/review/{cid}", data={"action": "now"}, follow_redirects=True)
+    assert "nog (opnieuw) gerenderd" in r.text
