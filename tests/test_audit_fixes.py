@@ -76,8 +76,8 @@ def test_recover_releases_orphan_uploads(app, settings):
 def test_admin_cannot_upload_someone_elses_clip(admin_client, settings, google):  # noqa: F811
     create_user("bob")
     _, (cid,) = make_project_with_clip(settings, "bob")
-    r = admin_client.post(f"/clips/{cid}/youtube", data={"title": "x", "privacy": "public"})
-    assert r.status_code == 403
+    r = admin_client.post(f"/clips/{cid}/youtube", data={"title": "x", "privacy": "public"}, follow_redirects=True)
+    assert "Alleen de eigenaar" in r.text
     db = new_session()
     assert db.get(Clip, cid).yt_status is None and db.scalar(select(Job).where(Job.kind == "upload")) is None
     db.close()
@@ -196,3 +196,51 @@ def test_lower_priority_uses_nice_prefix():
 
     cmd = resources.lower_priority(["ffmpeg", "-version"])
     assert cmd[-2:] == ["ffmpeg", "-version"]
+
+
+def test_upload_while_rendering_shows_message(admin_client, settings, google):  # noqa: F811
+    _setup_oauth(admin_client)
+    _connect(admin_client)
+    _, (cid,) = make_project_with_clip(settings, "admin")
+    db = new_session()
+    db.get(Clip, cid).status = "rendering"
+    db.commit()
+    db.close()
+    r = admin_client.post(f"/clips/{cid}/youtube", data={"title": "x"}, follow_redirects=True)
+    assert r.status_code == 200 and "wordt nog (opnieuw) gerenderd" in r.text
+    db = new_session()
+    assert db.get(Clip, cid).yt_status is None
+    db.close()
+
+
+def test_worker_supervisor_restarts(monkeypatch):
+    import subprocess
+    import sys
+
+    from app.worker import supervisor
+
+    monkeypatch.setattr(supervisor, "RESTART_DELAY", 0.05)
+    starts = []
+
+    def spawn(self):
+        starts.append(1)
+        return subprocess.Popen([sys.executable, "-c", "pass"])
+
+    monkeypatch.setattr(supervisor.Supervisor, "_spawn", spawn)
+    sup = supervisor.Supervisor()
+    sup.start()
+    import time
+
+    deadline = time.time() + 5
+    while len(starts) < 3 and time.time() < deadline:
+        time.sleep(0.05)
+    sup.stop()
+    assert len(starts) >= 3
+
+
+def test_ffmpeg_decode_threads_limited():
+    from app.core import resources
+
+    out = resources.ffmpeg_args(["ffmpeg", "-y", "-i", "a.mp4", "-i", "b.mp4", "o.mp4"])
+    assert out.count("-threads") == 3 and out[out.index("-i") - 2] == "-threads"
+    assert 1 <= resources.available_cpus() <= (__import__("os").cpu_count() or 1)

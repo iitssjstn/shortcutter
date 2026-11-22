@@ -47,7 +47,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if s.run_worker:
+        if s.run_worker and s.worker_process:
+            from app.worker.supervisor import Supervisor
+
+            sup = Supervisor()
+            sup.start()
+            worker_holder["w"] = sup
+        elif s.run_worker:  # alles in één proces (oude manier)
             from app.worker.runner import Worker
 
             w = Worker()

@@ -9,10 +9,18 @@ def test_ffmpeg_args_and_whisper_threads(monkeypatch):
     assert "-filter_complex_threads" in out
     assert resources.ffmpeg_args(["ffprobe", "x"]) == ["ffprobe", "x"]
     assert resources.ffmpeg_args(out) == out  # niet dubbel
-    monkeypatch.setattr(resources.os, "cpu_count", lambda: 16)
+    monkeypatch.setattr(resources, "available_cpus", lambda: 16)
     assert resources.whisper_threads(0) == 4 and resources.whisper_threads(3) == 3
-    monkeypatch.setattr(resources.os, "cpu_count", lambda: 2)
+    monkeypatch.setattr(resources, "available_cpus", lambda: 2)
     assert resources.whisper_threads(0) == 1
+    assert resources.ffmpeg_threads() == 2
+
+
+def test_available_cpus_reads_docker_limit(monkeypatch):
+    monkeypatch.setattr(resources, "_cgroup_cpu_quota", lambda: 2.0)
+    monkeypatch.setattr(resources.os, "cpu_count", lambda: 16)
+    monkeypatch.setattr(resources.os, "sched_getaffinity", lambda pid: set(range(16)), raising=False)
+    assert resources.available_cpus() == 2
 
 
 def test_render_still_works_with_limits(sample_video, tmp_path):
