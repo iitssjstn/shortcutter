@@ -25,6 +25,7 @@ services:
       # WHISPER_THREADS: "2"      # CPU-threads voor Whisper (0 = automatisch: helft van de kernen, max. 4)
       # FFMPEG_THREADS: "2"       # CPU-threads per render (meer = sneller, maar meer geheugen)
       # PROCESS_NICE: "10"        # lagere voorrang voor renderen/transcriberen (0 = uit)
+      # WORKER_PROCESS: "true"    # renderen in een apart proces, zodat de website blijft reageren (standaard aan)
       COOKIE_SECURE: "false"      # "true" zodra de app achter HTTPS (reverse proxy) draait
       # UPLOAD_CONCURRENCY: "4"   # zoveel YouTube-uploads tegelijk (los van het verwerken van projecten)
       # PUBLIC_URL: "https://shorts.jouwdomein.nl"  # nodig voor de YouTube-koppeling (redirect-URL bij Google)

@@ -159,12 +159,16 @@ def upload_clip(
     db: Session = Depends(get_db),
 ):
     clip = get_clip_for(db, user, cid)
-    _check_uploadable(db, user, clip)
-    if privacy not in yt.PRIVACY:
-        raise HTTPException(400, "Onbekende zichtbaarheid.")
-    when = _parse_local(publish_at)
-    if when is not None and when < datetime.now(when.tzinfo) + timedelta(minutes=15):
-        raise HTTPException(400, "Kies een publicatietijd minstens 15 minuten in de toekomst.")
+    back = f"/projects/{clip.project_id}#clip-{clip.id}"
+    try:  # een melding op de pagina in plaats van een kale foutpagina
+        _check_uploadable(db, user, clip)
+        if privacy not in yt.PRIVACY:
+            raise HTTPException(400, "Onbekende zichtbaarheid.")
+        when = _parse_local(publish_at)
+        if when is not None and when < datetime.now(when.tzinfo) + timedelta(minutes=15):
+            raise HTTPException(400, "Kies een publicatietijd minstens 15 minuten in de toekomst.")
+    except HTTPException as exc:
+        return redirect(back, str(exc.detail), "error")
     opts = {
         "title": title.strip()[: yt.TITLE_MAX],
         "description": description.strip()[: yt.DESC_MAX],
@@ -173,7 +177,7 @@ def upload_clip(
         "made_for_kids": made_for_kids in ("1", "on", "true"),
     }
     if not opts["title"]:
-        raise HTTPException(400, "De titel mag niet leeg zijn.")
+        return redirect(back, "De titel mag niet leeg zijn.", "error")
     _queue_upload(db, clip, opts)
     return redirect(f"/projects/{clip.project_id}#clip-{clip.id}", "Clip staat in de wachtrij om naar YouTube te uploaden.")
 

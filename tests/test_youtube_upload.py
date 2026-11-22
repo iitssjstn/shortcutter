@@ -143,7 +143,11 @@ def test_upload_quota_error(admin_client, settings, google):
 
 def test_upload_requires_connected_channel(admin_client, settings):
     _, (cid,) = make_project_with_clip(settings, "admin")
-    assert admin_client.post(f"/clips/{cid}/youtube", data={"title": "t"}).status_code == 400
+    r = admin_client.post(f"/clips/{cid}/youtube", data={"title": "t"}, follow_redirects=True)
+    assert r.status_code == 200 and "Koppel eerst een YouTube-kanaal" in r.text
+    db = new_session()
+    assert db.get(Clip, cid).yt_status is None
+    db.close()
 
 
 def test_schedule_and_token_refresh(admin_client, settings, google):

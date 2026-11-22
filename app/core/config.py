@@ -30,6 +30,8 @@ class Settings:
     public_url: str = field(default_factory=lambda: os.environ.get("PUBLIC_URL", "").strip().rstrip("/"))
     cookie_secure: bool = field(default_factory=lambda: _bool("COOKIE_SECURE", False))
     run_worker: bool = field(default_factory=lambda: _bool("RUN_WORKER", True))
+    # het zware werk in een apart proces, zodat de website altijd blijft reageren
+    worker_process: bool = field(default_factory=lambda: _bool("WORKER_PROCESS", True))
     session_days: int = 14
     max_upload_mb: int = field(default_factory=lambda: int(os.environ.get("MAX_UPLOAD_MB", "8192")))
 

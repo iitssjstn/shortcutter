@@ -371,10 +371,18 @@ def ensure_source(cid: int, it: CompilationItem) -> Path:
 
     Eén download tegelijk per clip: de editor en de render kunnen hem allebei vragen.
     """
+    import fcntl
+
     with _dl_locks_guard:
         lock = _dl_locks.setdefault((cid, it.slug), threading.Lock())
-    with lock:
-        return item_source(cid, it) or download(it.clip_url, comp_dir(cid) / "clips" / it.slug)[0]
+    d = comp_dir(cid) / "clips" / it.slug
+    d.mkdir(parents=True, exist_ok=True)
+    with lock, open(d.parent / f".{it.slug}.lock", "w") as fh:  # ook tussen website- en worker-proces
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            return item_source(cid, it) or download(it.clip_url, d)[0]
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 _fetching: set[tuple[int, int]] = set()
